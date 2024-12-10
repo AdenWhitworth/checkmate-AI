@@ -32,6 +32,8 @@ Welcome to **Checkmate AI**, the machine learning-powered chess engine driving t
 
 The Checkmate application is live and can be accessed here: [Checkmate Demo](https://checkmateplay.com). Explore all features, including human vs. human gameplay, human vs. bot gameplay, in-game chat, and player rankings.
 
+<img width="600" src="https://github.com/AdenWhitworth/aden_whitworth_portfolio/raw/master/src/Images/chess_demo.png" alt="Checkmate Demo">
+
 ### Test User Credentials
 
 Try out the app using the following demo accounts:
