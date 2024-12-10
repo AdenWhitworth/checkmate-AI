@@ -174,7 +174,10 @@ To simulate skill-specific gameplay, the base transformer model was fine-tuned f
     | **1000–1500**  | 0.4782 | 90.36%   |
     | **1500–2000**  | 0.5559 | 88.88%   |
     | **>2000**      | 0.6249 | 87.61%   |
-  
+
+<img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/TFMR_ELOS_LOSS.png" alt="Transformer Loss Chart">
+<img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/TFMR_ELOS_ACCURACY.png" alt="Transformer Accuracy Chart">
+
 - **Training Time**:
     - Training all models (base and fine-tuned) took approximately 24–48 hours on local hardware, depending on the CPU/GPU setup.
 
@@ -214,6 +217,9 @@ A DNN model was implemented as the initial approach to understand how basic neur
     | **1000–1500**  | 5.7089 | 9.99%    |
     | **1500–2000**  | 5.7176 | 9.41%    |
     | **>2000**      | 5.7024 | 8.83%    |
+
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/DNN_ELOS_LOSS.png" alt="DNN Loss Chart">
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/DNN_ELOS_ACCURACY.png" alt="DNN Loss Chart">
   
 - **Key Insights**:
     - The DNN memorized moves but lacked the situational awareness required to play chess effectively.
@@ -263,6 +269,9 @@ To improve the bot's awareness of chess-specific attributes, a Convolutional Neu
     | **1000–1500**  | 5.0810 | 10.46%   |
     | **1500–2000**  | 5.1264 | 10.24%   |
     | **>2000**      | 5.1905 | 9.66%    |
+
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/CNN_ELOS_LOSS.png" alt="CNN Loss Chart">
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/CNN_ELOS_ACCURACY.png" alt="CNN Loss Chart">
 
 - **Insights and Limitations**:
     - The CNN demonstrated a slight improvement over the DNN, with better accuracy across all ELO ranges.
