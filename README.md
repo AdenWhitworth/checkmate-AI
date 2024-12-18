@@ -26,11 +26,11 @@ Welcome to **Checkmate AI**, the machine learning-powered chess engine driving t
 
 ## Overview
 
-**Checkmate** is a real-time chess platform where players can compete against live opponents, chat in-game, track their rankings, and practice with human-like AI bots. The AI bot is built using TensorFlow in Python, processing games to train and test models. The trained models are exported in ONNX format for seamless integration into the Checkmate backend.
+**Checkmate** is a real-time chess platform where players can compete against live opponents, chat in-game, track their rankings, complete interactive puzzles, and practice with human-like AI bots. The AI bot is built using TensorFlow in Python, processing games to train and test models. The trained models are exported in ONNX format for seamless integration into the Checkmate backend.
 
 ## Checkmate Demo
 
-The Checkmate application is live and can be accessed here: [Checkmate Demo](https://checkmateplay.com). Explore all features, including human vs. human gameplay, human vs. bot gameplay, in-game chat, and player rankings.
+The Checkmate application is live and can be accessed here: [Checkmate Demo](https://checkmateplay.com). You can explore all features of the game, including real-time gameplay, puzzles, chat, and rankings.
 
 <img width="600" src="https://github.com/AdenWhitworth/aden_whitworth_portfolio/raw/master/src/Images/chess_demo.png" alt="Checkmate Demo">
 
@@ -62,6 +62,7 @@ Try out the app using the following demo accounts:
 - **Python**: The primary programming language for the project, powering all data processing, model training, and backend integration.
 - **Scikit-learn (SKLearn)**: A machine learning library for preprocessing data, evaluating models, and implementing supplementary algorithms like scaling and validation.
 - **TensorFlow**: An end-to-end machine learning framework used for building, training, and fine-tuning AI models, including transformers and neural networks.
+- **Linchess Database**: Open-source database containing millions of chess games, used to train the bots chess gameplay at varying skill levels.
 
 ## Getting Started
 
