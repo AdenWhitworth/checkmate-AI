@@ -1,10 +1,10 @@
 import zstandard as zstd
 
 compressed_file = "../../PGN Games/lichess_db_standard_rated_2024-09.pgn.zst"
-output_file = "../../PGN Games/partial_lichess_games_150k-300k.pgn"
+output_file = "../../PGN Games/partial_lichess_games_500k.pgn"
 
-target_game_count = 300000  # Games to extract 
-skip_game_count = 150000    # Games to skip
+target_game_count = 500000  # Games to extract 
+skip_game_count = 0    # Games to skip
 
 def is_new_game_line(line):
     """Check if a line marks the start of a new game."""
