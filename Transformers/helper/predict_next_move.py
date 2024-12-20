@@ -7,17 +7,19 @@ import random
 import json
 
 # Load move mappings from JSON files
-with open("../models/base_transformer_50k_games_Models/move_to_id.json", "r") as f:
+with open("../v3/models/base_transformer_full_games_15k_games_Models/move_to_id.json", "r") as f:
     moveToId = json.load(f)
 
-with open("../models/base_transformer_50k_games_Models/id_to_move.json", "r") as f:
+with open("../v3/models/base_transformer_full_games_15k_games_Models/id_to_move.json", "r") as f:
     idToMove = json.load(f)
 
 # Ensure JSON keys are converted to the correct types
 idToMove = {int(k): v for k, v in idToMove.items()}  # Convert keys to int
 
-# Load the trained model
-model = load_model("../models/base_transformer_50k_games_Models/tune_transformer_15k_games_Models/fine_tuned_elo_1500_2000.h5")
+model = load_model(
+    "../v3/models/base_transformer_full_games_15k_games_Models/next_move_model.tf"
+)
+
 max_length = model.input_shape[1]
 
 def predict_next_move(model, move_history, move_to_id, id_to_move, max_length, board):
@@ -29,7 +31,11 @@ def predict_next_move(model, move_history, move_to_id, id_to_move, max_length, b
     
     # Predict the next move probabilities
     predictions = model.predict(padded_history, verbose=0)  # Disable verbose output
-    move_probabilities = predictions[0, len(move_history)]
+    print(f"Predictions shape: {predictions.shape}")
+
+    move_probabilities = predictions[0]
+
+    print("move probabilites", move_probabilities)
     
     # Sort moves by predicted probability
     sorted_indices = tf.argsort(move_probabilities, direction="DESCENDING").numpy()
