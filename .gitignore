@@ -1,3 +1,4 @@
 *.pgn.zst
 *.zst
 *.pgn
+*.npz
