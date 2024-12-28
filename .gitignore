@@ -3,3 +3,6 @@
 *.pgn
 *.npz
 *.npy
+*.h5
+*.csv
+*exe
