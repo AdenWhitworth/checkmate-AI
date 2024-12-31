@@ -23,7 +23,7 @@ def fen_to_tensor(fen):
     """
     Convert FEN string to tensor representation.
     """
-    board, turn, _, _, _, _ = fen.split()
+    board, turn = fen.split()[:2]
     board_tensor = []
     for char in board:
         if char.isdigit():
@@ -46,41 +46,51 @@ def is_legal_move(fen, move):
     board = chess.Board(fen)
     return chess.Move.from_uci(move) in board.legal_moves
 
-# Function to predict the next move, centipawn evaluation, and mate evaluation
-def predict_next_move_and_eval(fen, moves, model, max_move_length=28):
-    # Prepare FEN tensor
+def predict_top_moves_and_eval(fen, moves, model, max_move_length=161, top_n=5):
+    """
+    Predict the top N moves and their evaluations from a given FEN and move history.
+    """
     fen_tensor = np.expand_dims(fen_to_tensor(fen), axis=0)
-
-    # Prepare moves tensor with padding
     move_indices = uci_to_tensor(moves, move_to_idx)
     moves_tensor = pad_sequences([move_indices], maxlen=max_move_length, padding="post")
 
-    # Make predictions
-    move_pred, cp_pred, mate_pred = model.predict([fen_tensor, moves_tensor])
+    # Predict using the model
+    move_pred, cp_preds, mate_preds = model.predict([fen_tensor, moves_tensor])
 
-    # Decode next move
+    # Sort moves by predicted probabilities
     sorted_indices = np.argsort(move_pred[0])[::-1]
+
+    # Create a chess.Board for legality checks
+    board = chess.Board(fen)
+
+    top_moves = []
+
     for idx in sorted_indices:
         predicted_move = idx_to_move[idx]
-        if is_legal_move(fen, predicted_move):
-            break
 
-    # Determine which evaluation to use
-    predicted_cp_eval = cp_pred[0][0]  # CP evaluation
-    predicted_mate_eval = mate_pred[0][0]  # Mate evaluation
+        # Check if the move is legal
+        if chess.Move.from_uci(predicted_move) in board.legal_moves:
+            top_moves.append({
+                "move": predicted_move,
+                "probability": move_pred[0][idx],
+                "cp_eval": cp_preds[0][idx] * 1000.0,  # Scale back to centipawns
+                "mate_eval": mate_preds[0][idx]
+            })
+            if len(top_moves) == top_n:
+                break
 
-    if abs(predicted_mate_eval) > 0:  # If mate evaluation is valid
-        evaluation = f"Mate in {int(predicted_mate_eval)}"
-    else:  # Otherwise, use centipawn evaluation
-        evaluation = f"{predicted_cp_eval} centipawns"
+    return top_moves
 
-    return predicted_move, evaluation
+# Example FEN and move sequence
+fen = "r2q1rk1/pp1nbppp/3p1n2/2p1p3/2P1P3/2N1BN2/PPQ2PPP/R3K2R w KQ - 0 10"
+#moves = ["e2e4", "e7e5", "g1f3", "d7d6", "c2c4", "g8f6", "b1c3", "f8e7", "f1e2", "e8g8", "e1g1"]
+moves = ["e1g1"]
 
-# Example usage
-fen = "rnbqkb1r/pp2pppp/3p4/8/3nP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 5"  # Example FEN
-moves = ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4"]  # Example move sequence
+top_moves = predict_top_moves_and_eval(fen, moves, model, top_n=5)
 
-predicted_move, evaluation = predict_next_move_and_eval(fen, moves, model)
-print(f"Predicted next move: {predicted_move}")
-print(f"Evaluation: {evaluation}")
+# Print the top N moves and their evaluations
+print("Top Moves and Evaluations:")
+for i, move_data in enumerate(top_moves, start=1):
+    print(f"Rank {i}: Move: {move_data['move']}, Probability: {move_data['probability']:.4f}, "
+          f"CP Evaluation: {move_data['cp_eval']:.2f} (centipawns), Mate Evaluation: {move_data['mate_eval']:.2f}")
 
