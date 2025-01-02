@@ -7,7 +7,7 @@ import chess
 
 # Load preprocessed mappings and model
 move_to_idx_file = "models/checkpoints3/move_to_idx.json"
-model_file = "models/checkpoints3/model_midgame_final.h5"
+model_file = "models/checkpoints3/model_final_with_outcome.h5"
 
 with open(move_to_idx_file, "r") as f:
     move_to_idx = json.load(f)
@@ -46,8 +46,8 @@ def is_legal_move(fen, move):
     board = chess.Board(fen)
     return chess.Move.from_uci(move) in board.legal_moves
 
-# Function to predict the next move, centipawn evaluation, and mate evaluation
-def predict_next_move_and_eval(fen, moves, model, max_move_length=28):
+# Function to predict the next move
+def predict_next_move_and_outcome(fen, moves, model, max_move_length=28):
     # Prepare FEN tensor
     fen_tensor = np.expand_dims(fen_to_tensor(fen), axis=0)
 
@@ -55,8 +55,8 @@ def predict_next_move_and_eval(fen, moves, model, max_move_length=28):
     move_indices = uci_to_tensor(moves, move_to_idx)
     moves_tensor = pad_sequences([move_indices], maxlen=max_move_length, padding="post")
 
-    # Make predictions
-    move_pred, cp_pred, mate_pred = model.predict([fen_tensor, moves_tensor])
+    # Make prediction
+    move_pred, outcome_pred = model.predict([fen_tensor, moves_tensor])
 
     # Decode next move
     sorted_indices = np.argsort(move_pred[0])[::-1]
@@ -65,22 +65,16 @@ def predict_next_move_and_eval(fen, moves, model, max_move_length=28):
         if is_legal_move(fen, predicted_move):
             break
 
-    # Determine which evaluation to use
-    predicted_cp_eval = cp_pred[0][0]  # CP evaluation
-    predicted_mate_eval = mate_pred[0][0]  # Mate evaluation
+    # Decode outcome prediction using updated mapping
+    reverse_outcome_map = {0: "Loss", 1: "Draw", 2: "Win"}
+    predicted_outcome = reverse_outcome_map[np.argmax(outcome_pred[0])]
 
-    if abs(predicted_mate_eval) > 0:  # If mate evaluation is valid
-        evaluation = f"Mate in {int(predicted_mate_eval)}"
-    else:  # Otherwise, use centipawn evaluation
-        evaluation = f"{predicted_cp_eval} centipawns"
-
-    return predicted_move, evaluation
+    return predicted_move, predicted_outcome
 
 # Example usage
 fen = "rnbqkb1r/pp2pppp/3p4/8/3nP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 5"  # Example FEN
 moves = ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4"]  # Example move sequence
 
-predicted_move, evaluation = predict_next_move_and_eval(fen, moves, model)
+predicted_move, predicted_outcome = predict_next_move_and_outcome(fen, moves, model)
 print(f"Predicted next move: {predicted_move}")
-print(f"Evaluation: {evaluation}")
-
+print(f"Predicted game outcome: {predicted_outcome}")

@@ -70,7 +70,7 @@ for move in result["top_moves"]:
     print(f"Move: {move['move']}, Evaluation: {move['evaluation']}")
 
 stockfish.set_fen_position(fen)
-stockfish.make_moves_from_current_position(["f3d4"])
-eval_f3d4 = stockfish.get_evaluation()
-format_eval = format_evaluation(eval_f3d4)
-print("eval_f3d4", format_eval)
+stockfish.make_moves_from_current_position(["a2a3"])
+eval_a2a3 = stockfish.get_evaluation()
+format_eval = format_evaluation(eval_a2a3)
+print("eval_a2a3", format_eval)
