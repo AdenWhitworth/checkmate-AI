@@ -1,6 +1,8 @@
 #loss: 9.7301 - next_move_output_loss: 4.8537 - cp_outputs_loss: 0.0035 - mate_outputs_loss: 3.2657e-04 - next_move_output_accuracy: 0.1117 - next_move_output_top_5_accuracy: 0.0000e+00 - cp_outputs_mae: 0.0149 - mate_outputs_mae: 0.0075 - val_loss: 12.1662 - val_next_move_output_loss: 6.0719 - val_cp_outputs_loss: 0.0034 - val_mate_outputs_loss: 2.4817e-04 - val_next_move_output_accuracy: 0.0637 - val_next_move_output_top_5_accuracy: 0.0000e+00 - val_cp_outputs_mae: 0.0137 - val_mate_outputs_mae: 0.0063
 #loss: 4.6842 - next_move_output_loss: 4.6769 - cp_outputs_loss: 0.0032 - mate_outputs_loss: 3.6313e-05 - next_move_output_accuracy: 0.1322 - next_move_output_<lambda>: 0.2988 - cp_outputs_mae: 0.0098 - mate_outputs_mae: 0.0013 - val_loss: 6.0562 - val_next_move_output_loss: 6.0489 - val_cp_outputs_loss: 0.0031 - val_mate_outputs_loss: 1.8966e-05 - val_next_move_output_accuracy: 0.0678 - val_next_move_output_<lambda>: 0.1779 - val_cp_outputs_mae: 0.0095 - val_mate_outputs_mae: 8.6648e-04
-#loss: 4.8450 - next_move_output_loss: 4.8378 - cp_outputs_loss: 0.0032 - mate_outputs_loss: 4.0608e-05 - next_move_output_accuracy: 0.1142 - next_move_output_top_k_accuracy: 0.2713 - cp_outputs_mae: 0.0101 - mate_outputs_mae: 0.0015 - val_loss: 6.0103 - val_next_move_output_loss: 6.0032 - val_cp_outputs_loss: 0.0031 - val_mate_outputs_loss: 2.0520e-05 - val_next_move_output_accuracy: 0.0713 - val_next_move_output_top_k_accuracy: 0.1823 - val_cp_outputs_mae: 0.0096 - val_mate_outputs_mae: 9.2591e-04
+#700 games loss: 4.8450 - next_move_output_loss: 4.8378 - cp_outputs_loss: 0.0032 - mate_outputs_loss: 4.0608e-05 - next_move_output_accuracy: 0.1142 - next_move_output_top_k_accuracy: 0.2713 - cp_outputs_mae: 0.0101 - mate_outputs_mae: 0.0015 - val_loss: 6.0103 - val_next_move_output_loss: 6.0032 - val_cp_outputs_loss: 0.0031 - val_mate_outputs_loss: 2.0520e-05 - val_next_move_output_accuracy: 0.0713 - val_next_move_output_top_k_accuracy: 0.1823 - val_cp_outputs_mae: 0.0096 - val_mate_outputs_mae: 9.2591e-04
+#2200 games loss: 4.2049 - next_move_output_loss: 4.1999 - cp_outputs_loss: 0.0031 - mate_outputs_loss: 1.5088e-05 - next_move_output_accuracy: 0.1594 - next_move_output_top_k_accuracy: 0.3713 - cp_outputs_mae: 0.0095 - mate_outputs_mae: 4.8922e-04 - val_loss: 5.0888 - val_next_move_output_loss: 5.0837 - val_cp_outputs_loss: 0.0031 - val_mate_outputs_loss: 6.3321e-06 - val_next_move_output_accuracy: 0.1087 - val_next_move_output_top_k_accuracy: 0.2786 - val_cp_outputs_mae: 0.0093 - val_mate_outputs_mae: 3.0456e-04
+#3200 games loss: 4.1148 - next_move_output_loss: 4.1104 - cp_outputs_loss: 0.0030 - mate_outputs_loss: 8.9957e-06 - next_move_output_accuracy: 0.1583 - next_move_output_top_k_accuracy: 0.3817 - cp_outputs_mae: 0.0091 - mate_outputs_mae: 3.5462e-04 - val_loss: 4.6129 - val_next_move_output_loss: 4.6085 - val_cp_outputs_loss: 0.0030 - val_mate_outputs_loss: 5.7073e-06 - val_next_move_output_accuracy: 0.1324 - val_next_move_output_top_k_accuracy: 0.3217 - val_cp_outputs_mae: 0.0090 - val_mate_outputs_mae: 8.4046e-05
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
@@ -13,13 +15,13 @@ import json
 import os
 
 # File paths
-processed_json_path = r"D:\checkmate_ai\game_phases\midgame_data2.jsonl"
-fens_file = "models/checkpoints7/fens.npy"
-moves_file = "models/checkpoints7/moves.npy"
-labels_file = "models/checkpoints7/labels.npy"
-cp_evaluations_file = "models/checkpoints7/cp_evaluations.npy"
-mate_evaluations_file = "models/checkpoints7/mate_evaluations.npy"
-move_to_idx_file = "models/checkpoints7/move_to_idx.json"
+processed_json_path = r"D:\checkmate_ai\game_phases\midgame_data3.jsonl"
+fens_file = "models/checkpoints9/fens.npy"
+moves_file = "models/checkpoints9/moves.npy"
+labels_file = "models/checkpoints9/labels.npy"
+cp_evaluations_file = "models/checkpoints9/cp_evaluations.npy"
+mate_evaluations_file = "models/checkpoints9/mate_evaluations.npy"
+move_to_idx_file = "models/checkpoints9/move_to_idx.json"
 
 # FEN preprocessing functions
 def fen_to_tensor_enhanced(fen):
@@ -231,7 +233,7 @@ model.compile(
     },
 )
 
-checkpoint = ModelCheckpoint("models/checkpoints7/model_midgame_checkpoint.h5", save_best_only=True, monitor="val_loss", mode="min")
+checkpoint = ModelCheckpoint("models/checkpoints9/model_midgame_checkpoint.h5", save_best_only=True, monitor="val_loss", mode="min")
 early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")
 lr_schedule = LearningRateScheduler(lr_scheduler)
 
@@ -246,5 +248,5 @@ history = model.fit(
 )
 
 # Save the final model
-model.save("models/checkpoints7/model_midgame_final.h5")
+model.save("models/checkpoints9/model_midgame_final.h5")
 print("Model training complete and saved.")

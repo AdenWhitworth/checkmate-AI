@@ -219,7 +219,7 @@ def process_first_game(pgn_path, db_path, midgame_output, endgame_output):
 # File paths
 db_path = r"D:\checkmate_ai\evaluations.db"
 pgn_file = "../../PGN Games/partial_lichess_games_26k_filtered_2000_elo.pgn"
-midgame_output = r"D:\checkmate_ai\game_phases\midgame_data2.jsonl"
+midgame_output = r"D:\checkmate_ai\game_phases\midgame_data3.jsonl"
 
 # Run the processing
 process_pgn_file(pgn_file, db_path, midgame_output)

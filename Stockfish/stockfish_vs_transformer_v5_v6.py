@@ -9,6 +9,8 @@ import chess.pgn
 from stockfish import Stockfish
 import chess.engine
 
+transposition_table = {}
+
 def top_k_accuracy(y_true, y_pred, k=5):
     return tf.keras.metrics.sparse_top_k_categorical_accuracy(y_true, y_pred, k=k)
 
@@ -32,8 +34,8 @@ opening_model, opening_idx_to_move, opening_move_to_idx = init_model(
 )
 
 middle_model, middle_idx_to_move, middle_move_to_idx = init_model(
-    "../Transformers/v6/models/checkpoints7/model_midgame_final.h5",
-    "../Transformers/v6/models/checkpoints7/move_to_idx.json",
+    "../Transformers/v6/models/checkpoints9/model_midgame_final.h5",
+    "../Transformers/v6/models/checkpoints9/move_to_idx.json",
     custom_objects={"top_k_accuracy": top_k_accuracy}
 )
 
@@ -108,12 +110,149 @@ def predict_opening_move(fen, moves, model, move_to_idx, idx_to_move, max_move_l
 
     return predicted_move, predicted_outcome
 
+def predict_middle_move_weighted_all(
+    fen, moves, model, move_to_idx, idx_to_move, max_move_length=195, top_n=5, 
+    weight_prob=0.4, weight_eval=0.6, mate_eval_priority=100
+):
+    fen_tensor = np.expand_dims(middle_fen_to_tensor(fen), axis=0)
+    move_indices = uci_to_tensor(moves, move_to_idx)
+    moves_tensor = pad_sequences([move_indices], maxlen=max_move_length, padding="post")
+
+    # Predict using the model
+    move_pred, cp_preds, mate_preds = model.predict([fen_tensor, moves_tensor])
+
+    # Sort moves by predicted probabilities
+    sorted_indices = np.argsort(move_pred[0])[::-1]
+
+    # Create a chess.Board for legality checks
+    board = chess.Board(fen)
+
+    top_moves = []
+
+    for idx in sorted_indices:
+        predicted_move = idx_to_move[idx]
+
+        # Check if the move is legal
+        if chess.Move.from_uci(predicted_move) in board.legal_moves:
+            cp_eval = cp_preds[0][idx] * 1000.0  # Scale back to centipawns
+            mate_eval = mate_preds[0][idx]  # Raw mate eval in plies
+            
+            # Normalize evaluations
+            cp_score = cp_eval / 1000.0  # Scale to [-1, 1]
+            mate_score = -mate_eval / mate_eval_priority if mate_eval != 0 else 0.0
+            
+            # Determine final evaluation score
+            if abs(mate_eval) < mate_eval_priority and mate_eval != 0:
+                # Use mate_score if decisive mate is detected
+                eval_score = mate_score
+                prob_weight = 0.2  # Deprioritize probability
+                eval_weight = 0.8  # Prioritize evaluation
+            else:
+                # Use cp_score otherwise
+                eval_score = cp_score
+                prob_weight = weight_prob
+                eval_weight = weight_eval
+
+            # Weighted score calculation
+            weighted_score = prob_weight * move_pred[0][idx] + eval_weight * eval_score
+
+            # Avoid negative scores (optional adjustment)
+            weighted_score = max(weighted_score, 0)
+
+            top_moves.append({
+                "move": predicted_move,
+                "probability": move_pred[0][idx],
+                "cp_eval": cp_eval,
+                "mate_eval": mate_eval,
+                "weighted_score": weighted_score,
+            })
+
+    # Sort the top moves by weighted score
+    top_moves = sorted(top_moves, key=lambda x: x["weighted_score"], reverse=True)
+    return top_moves
+
+def alpha_beta_pruning(game_moves, depth, alpha, beta, is_maximizing, model, move_to_idx, idx_to_move):
+    """
+    Perform depth-limited alpha-beta pruning to evaluate the best move.
+    Create a fresh board instance using the game move history for each call.
+    """
+    # Recreate the board from game moves to avoid modifying the original
+    board = chess.Board()
+    for move in game_moves:
+        board.push(chess.Move.from_uci(move))
+
+    # Get the current FEN
+    fen = board.fen()
+
+    # Check transposition table
+    if fen in transposition_table:
+        return transposition_table[fen]
+
+    # Check for terminal state or depth limit
+    if depth == 0 or board.is_game_over():
+        middle_game_moves = game_moves[10:]  # Exclude first 10 moves for midgame
+        all_moves = predict_middle_move_weighted_all(fen, middle_game_moves, model, move_to_idx, idx_to_move)
+        if not all_moves:
+            # No moves available, return an evaluation based on maximizing player
+            return (-float("inf"), None) if is_maximizing else (float("inf"), None)
+
+        best_score = max(move["weighted_score"] for move in all_moves)
+        best_move = all_moves[0]["move"]
+        transposition_table[fen] = (best_score, best_move)
+        return best_score, best_move.uci() if isinstance(best_move, chess.Move) else best_move
+
+    best_score = -float("inf") if is_maximizing else float("inf")
+    best_move = None
+
+    # Predict moves using `predict_middle_move_weighted_all` for move ordering
+    middle_game_moves = game_moves[10:]
+    all_moves = predict_middle_move_weighted_all(fen, middle_game_moves, model, move_to_idx, idx_to_move)
+
+    if not all_moves:
+        print("Fallback to `predict_middle_move_weighted`")
+        # Use a fallback to `predict_middle_move_weighted`
+        best_move, top_moves = predict_middle_move_weighted(fen, middle_game_moves, model, move_to_idx, idx_to_move)
+        if top_moves:
+            best_score = top_moves[0]["weighted_score"]
+            transposition_table[fen] = (best_score, best_move)
+        return best_score, best_move.uci() if isinstance(best_move, chess.Move) else best_move
+
+    # Iterate through all sorted moves
+    for move_data in all_moves:
+        move = chess.Move.from_uci(move_data["move"])
+        next_game_moves = game_moves + [move.uci()]  # Use a copy of game_moves
+
+        # Recursively evaluate the move
+        score, _ = alpha_beta_pruning(
+            next_game_moves, depth - 1, alpha, beta, not is_maximizing, model, move_to_idx, idx_to_move
+        )
+
+        # Update best score and move
+        if is_maximizing:
+            if score > best_score:
+                best_score = score
+                best_move = move
+            alpha = max(alpha, score)
+        else:
+            if score < best_score:
+                best_score = score
+                best_move = move
+            beta = min(beta, score)
+
+        # Prune the search
+        if beta <= alpha:
+            break
+
+    # Store result in transposition table
+    transposition_table[fen] = (best_score, best_move.uci() if isinstance(best_move, chess.Move) else best_move)
+    return best_score, best_move.uci() if isinstance(best_move, chess.Move) else best_move
+
 def predict_middle_move_weighted(
-    fen, moves, model, move_to_idx, idx_to_move, max_move_length=161, top_n=5, weight_prob=0.5, weight_eval=0.5, mate_eval_threshold=1000
+    fen, moves, model, move_to_idx, idx_to_move, max_move_length=195, top_n=5, 
+    weight_prob=0.4, weight_eval=0.6, mate_eval_priority=100
 ):
     """
-    Predict the best move during the middle game using weighted probability and evaluation scores,
-    dynamically prioritizing mate evaluations when present.
+    Predict the best move during the middle game using weighted probability and evaluation scores.
     
     Args:
         fen (str): FEN string of the position.
@@ -125,7 +264,7 @@ def predict_middle_move_weighted(
         top_n (int): Number of top moves to return.
         weight_prob (float): Base weight for the move probability in scoring.
         weight_eval (float): Base weight for the evaluation score in scoring.
-        mate_eval_threshold (int): Threshold for prioritizing mate evaluations over centipawn scores.
+        mate_eval_priority (float): Priority factor for mate evaluations.
 
     Returns:
         (dict, list): Best move and top moves with scores and evaluations.
@@ -152,21 +291,28 @@ def predict_middle_move_weighted(
         if chess.Move.from_uci(predicted_move) in board.legal_moves:
             cp_eval = cp_preds[0][idx] * 1000.0  # Scale back to centipawns
             mate_eval = mate_preds[0][idx]  # Raw mate eval in plies
-
-            # Determine the evaluation score
-            if abs(mate_eval) < mate_eval_threshold and mate_eval != 0:
-                # Favor mate-in-X (smaller mate_eval is better)
-                eval_score = -mate_eval  # Negative for prioritizing smaller mate plies
-                weight_prob = 0.2  # Reduce probability weight for decisive mate scenarios
-                weight_eval = 0.8  # Increase evaluation weight for decisive mate scenarios
+            
+            # Normalize evaluations
+            cp_score = cp_eval / 1000.0  # Scale to [-1, 1]
+            mate_score = -mate_eval / mate_eval_priority if mate_eval != 0 else 0.0
+            
+            # Determine final evaluation score
+            if abs(mate_eval) < mate_eval_priority and mate_eval != 0:
+                # Use mate_score if decisive mate is detected
+                eval_score = mate_score
+                prob_weight = 0.2  # Deprioritize probability
+                eval_weight = 0.8  # Prioritize evaluation
             else:
-                # Use cp_eval when mate_eval is absent or irrelevant
-                eval_score = cp_eval / 1000.0  # Normalize CP eval to [-1, 1]
-                weight_prob = 0.4
-                weight_eval = 0.6
+                # Use cp_score otherwise
+                eval_score = cp_score
+                prob_weight = weight_prob
+                eval_weight = weight_eval
 
             # Weighted score calculation
-            weighted_score = weight_prob * move_pred[0][idx] + weight_eval * eval_score
+            weighted_score = prob_weight * move_pred[0][idx] + eval_weight * eval_score
+
+            # Avoid negative scores (optional adjustment)
+            weighted_score = max(weighted_score, 0)
 
             top_moves.append({
                 "move": predicted_move,
@@ -183,10 +329,10 @@ def predict_middle_move_weighted(
     top_moves = sorted(top_moves, key=lambda x: x["weighted_score"], reverse=True)
     print("Top moves: ", top_moves)
     # Return the best move and all top moves
-    best_move = top_moves[0]["move"]
+    best_move = top_moves[0]["move"] if top_moves else None
     return best_move, top_moves
 
-def predict_middle_move(fen, moves, model, move_to_idx, idx_to_move, max_move_length=161, top_n=5):
+def predict_middle_move(fen, moves, model, move_to_idx, idx_to_move, max_move_length=195, top_n=5):
     fen_tensor = np.expand_dims(middle_fen_to_tensor(fen), axis=0)
     move_indices = uci_to_tensor(moves, move_to_idx)
     moves_tensor = pad_sequences([move_indices], maxlen=max_move_length, padding="post")
@@ -277,10 +423,22 @@ def predict_best_move(fen, moves, opening_model, middle_model, opening_move_to_i
         best_move = predict_end_move(fen)
     else:  # Middle game phase
         print("Game State: Middle")
-        # Remove the first 10 moves for middle game
-        middle_game_moves = moves[10:]
-        best_move, _ = predict_middle_move_weighted(fen, middle_game_moves, middle_model, middle_move_to_idx, middle_idx_to_move)
-    
+        depth = 3
+        
+        best_score, best_move = alpha_beta_pruning(
+            moves,  # Pass the official game move tracker
+            depth,
+            alpha=-float("inf"),
+            beta=float("inf"),
+            is_maximizing=True,
+            model=middle_model,
+            move_to_idx=middle_move_to_idx,
+            idx_to_move=middle_idx_to_move,
+        )
+        
+        #middle_game_moves = moves[10:]
+        #best_move, _ = predict_middle_move_weighted(fen, middle_game_moves, middle_model, middle_move_to_idx, middle_idx_to_move)
+        
     return best_move
 
 # Replace Stockfish wrapper with chess.engine
@@ -349,76 +507,3 @@ with chess.engine.SimpleEngine.popen_uci(engine_path) as stockfish:
 
     print("Final PGN:")
     print(pgn_game)
-
-"""stockfish_path = "../Stockfish/stockfish/stockfish.exe"
-stockfish = Stockfish(stockfish_path)
-stockfish.set_skill_level(1)  # Minimum skill level
-stockfish.set_engine_option("UCI_LimitStrength", True)
-stockfish.set_engine_option("UCI_Elo", 800)
-
-
-# Initialize PGN game
-pgn_game = chess.pgn.Game()
-pgn_game.headers["Event"] = "Stockfish vs Transformer"
-pgn_game.headers["White"] = "Transformer Model"
-pgn_game.headers["Black"] = "Stockfish"
-
-# Set up the node for adding moves
-node = pgn_game
-
-board = chess.Board()
-move_history = []
-
-while not board.is_game_over():
-    if board.turn:  # Model's turn (White if True, Black if False)
-        fen = board.fen()
-        best_move = predict_best_move(
-            fen,
-            move_history,
-            opening_model,
-            middle_model,
-            opening_move_to_idx,
-            opening_idx_to_move,
-            middle_move_to_idx,
-            middle_idx_to_move,
-        )
-        print(f"Transformer Best Move: {best_move}")
-        
-        if best_move:
-            board.push(chess.Move.from_uci(best_move))
-            move_history.append(best_move)
-            node = node.add_variation(chess.Move.from_uci(best_move))
-        else:
-            print(f"No valid move found. Model failed.")
-            break
-    else:
-        stockfish.set_fen_position(board.fen())
-        stockfish_move = stockfish.get_best_move(depth=3)
-        print(f"Stockfish's Move: {stockfish_move}")
-        stockfish_move_obj = chess.Move.from_uci(stockfish_move)
-        if stockfish_move_obj in board.legal_moves:
-            board.push(stockfish_move_obj)
-            move_history.append(stockfish_move)
-            node = node.add_variation(stockfish_move_obj)
-        else:
-            print("Stockfish produced an invalid move.")
-            break
-
-# Output the result
-result = board.result()
-pgn_game.headers["Result"] = result
-print(f"Game Over. Result: {result}")
-
-# Save PGN
-with open("game.pgn", "w") as pgn_file:
-    pgn_file.write(str(pgn_game))
-
-print("Final PGN:")
-print(pgn_game)"""
-
-
-
-
-
-
-
