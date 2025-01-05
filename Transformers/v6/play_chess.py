@@ -29,13 +29,13 @@ def init_model(model_file, move_to_idx_file, custom_objects=None):
     return model, idx_to_move, move_to_idx
 
 opening_model, opening_idx_to_move, opening_move_to_idx = init_model(
-    "../Transformers/v5/models/checkpoints3/model_final_with_outcome.h5",
-    "../Transformers/v5/models/checkpoints3/move_to_idx.json"
+    "../v5/models/checkpoints3/model_final_with_outcome.h5",
+    "../v5/models/checkpoints3/move_to_idx.json"
 )
 
 middle_model, middle_idx_to_move, middle_move_to_idx = init_model(
-    "../Transformers/v6/models/checkpoints9/model_midgame_final.h5",
-    "../Transformers/v6/models/checkpoints9/move_to_idx.json",
+    "./models/checkpoints9/model_midgame_final.h5",
+    "./models/checkpoints9/move_to_idx.json",
     custom_objects={"top_k_accuracy": top_k_accuracy}
 )
 
@@ -423,87 +423,64 @@ def predict_best_move(fen, moves, opening_model, middle_model, opening_move_to_i
         best_move = predict_end_move(fen)
     else:  # Middle game phase
         print("Game State: Middle")
-        depth = 2
         
-        best_score, best_move = alpha_beta_pruning(
-            moves,  # Pass the official game move tracker
-            depth,
-            alpha=-float("inf"),
-            beta=float("inf"),
-            is_maximizing=True,
-            model=middle_model,
-            move_to_idx=middle_move_to_idx,
-            idx_to_move=middle_idx_to_move,
-        )
-        
-        #middle_game_moves = moves[10:]
-        #best_move, _ = predict_middle_move_weighted(fen, middle_game_moves, middle_model, middle_move_to_idx, middle_idx_to_move)
-        
+        middle_game_moves = moves[10:]
+        best_move, _ = predict_middle_move_weighted(fen, middle_game_moves, middle_model, middle_move_to_idx, middle_idx_to_move)
+    
     return best_move
 
-# Replace Stockfish wrapper with chess.engine
-engine_path = "../Stockfish/stockfish/stockfish.exe"
+# Initialize chess game
+board = chess.Board()
+move_history = []
 
-# Game setup
-with chess.engine.SimpleEngine.popen_uci(engine_path) as stockfish:
-    # Configure Stockfish to play like a novice
-    #stockfish.configure({"UCI_LimitStrength": True, "UCI_Elo": 800})  # Low ELO for novice play
-    stockfish.configure({"Skill Level": 1})
+print("Welcome to the Interactive Chess Game!")
+print("The AI will play as White, and you will play as Black.")
+print("You can input moves in UCI notation (e.g., 'e2e4'). Type 'exit' to quit.")
+print(board)
 
-    # Initialize PGN game
-    pgn_game = chess.pgn.Game()
-    pgn_game.headers["Event"] = "Stockfish vs Transformer"
-    pgn_game.headers["White"] = "Transformer Model"
-    pgn_game.headers["Black"] = "Stockfish"
+while not board.is_game_over():
+    if board.turn:  # AI's turn (White)
+        print("\nAI is thinking...")
+        best_move = predict_best_move(
+            board.fen(),
+            move_history,
+            opening_model,
+            middle_model,
+            opening_move_to_idx,
+            opening_idx_to_move,
+            middle_move_to_idx,
+            middle_idx_to_move,
+        )
+        if best_move:
+            move = chess.Move.from_uci(best_move)
+            board.push(move)
+            move_history.append(move.uci())
+            print(f"AI Move (White): {best_move}")
+        else:
+            print("AI could not find a valid move. Exiting...")
+            break
+    else:  # User's turn (Black)
+        print("\nYour Turn (Black):")
+        print(board)
+        print(f"Current FEN: {board.fen()}")
 
-    # Set up the board and move history
-    board = chess.Board()
-    move_history = []
-    node = pgn_game
+        move_input = input("Enter your move (or type 'exit' to quit): ").strip()
+        if move_input.lower() == 'exit':
+            print("Game ended by user.")
+            break
 
-    while not board.is_game_over():
-        if board.turn:  # Model's turn (White)
-            fen = board.fen()
-            best_move = predict_best_move(
-                fen,
-                move_history,
-                opening_model,
-                middle_model,
-                opening_move_to_idx,
-                opening_idx_to_move,
-                middle_move_to_idx,
-                middle_idx_to_move,
-            )
-            print(f"Transformer Best Move: {best_move}")
-
-            if best_move:
-                board.push(chess.Move.from_uci(best_move))
-                move_history.append(best_move)
-                node = node.add_variation(chess.Move.from_uci(best_move))
+        try:
+            move = chess.Move.from_uci(move_input)
+            if move in board.legal_moves:
+                board.push(move)
+                move_history.append(move.uci())
             else:
-                print("No valid move found for the model.")
-                break
-        else:  # Stockfish's turn (Black)
-            result = stockfish.play(board, chess.engine.Limit(depth=1))  # Depth limit for novice play
-            stockfish_move = result.move
-            print(f"Stockfish's Move: {stockfish_move}")
+                print("Invalid move. Try again.")
+        except ValueError:
+            print("Invalid UCI format. Please enter a valid move (e.g., 'e7e5').")
+            continue
 
-            if stockfish_move in board.legal_moves:
-                board.push(stockfish_move)
-                move_history.append(stockfish_move.uci())
-                node = node.add_variation(stockfish_move)
-            else:
-                print("Stockfish produced an invalid move.")
-                break
-
-    # Output the result
-    result = board.result()
-    pgn_game.headers["Result"] = result
-    print(f"Game Over. Result: {result}")
-
-    # Save PGN
-    with open("game.pgn", "w") as pgn_file:
-        pgn_file.write(str(pgn_game))
-
-    print("Final PGN:")
-    print(pgn_game)
+    if board.is_game_over():
+        result = board.result()
+        print(f"\nGame Over! Result: {result}")
+        break
