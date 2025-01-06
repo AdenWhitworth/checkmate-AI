@@ -171,7 +171,7 @@ if __name__ == "__main__":
     }
 
     # Process 5000 games for all ELO ranges
-    process_pgn_games("path_to_pgn.pgn", "5000_GAMES_FENS", ranges_all, max_games_per_range=5000)
+    process_pgn_games("../../PGN Games/pgns/partial_lichess_games_300k.pgn", "5000_GAMES_FENS", ranges_all, max_games_per_range=5000)
 
     # Process games for base ELO ranges in combined mode
-    process_pgn_games("path_to_pgn.pgn", "15000_GAMES_FENS", ranges_base, max_games_per_range=15000, combined=True)
+    process_pgn_games("../../PGN Games/pgns/partial_lichess_games_300k.pgn", "15000_GAMES_FENS", ranges_base, max_games_per_range=15000, combined=True)
