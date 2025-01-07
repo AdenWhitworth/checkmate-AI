@@ -124,9 +124,9 @@ def setup_and_predict_move(model_path, move_to_id_path, id_to_move_path, move_hi
 
 if __name__ == "__main__":
     # Paths to model and mappings
-    model_path = "../models/base_transformer_50k_games_Models/tune_transformer_15k_games_Models/fine_tuned_elo_2000_plus.h5"
-    move_to_id_path = "../models/base_transformer_50k_games_Models/move_to_id.json"
-    id_to_move_path = "../models/base_transformer_50k_games_Models/id_to_move.json"
+    model_path = "../models/base_transformer_15k_games_Models/model_checkpoint.h5"
+    move_to_id_path = "../models/base_transformer_15k_games_Models/move_to_id.json"
+    id_to_move_path = "../models/base_transformer_15k_games_Models/id_to_move.json"
 
     # Example move history
     move_history = ["d4", "c5", "d5", "Nf6"]

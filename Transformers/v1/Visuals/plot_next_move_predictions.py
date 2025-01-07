@@ -12,8 +12,6 @@ sys.path.append(parent_dir)
 # Now you can import the module
 from testing.predict_next_move import setup_and_predict_move
 
-
-
 def plot_top_predictions(sorted_probabilities, top_n=10):
     """
     Plot the top N predicted moves and their probabilities.

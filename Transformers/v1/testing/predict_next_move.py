@@ -61,9 +61,16 @@ def predict_next_move(session, move_history, move_to_id, id_to_move, max_length,
     sorted_moves = [id_to_move.get(int(idx), "<unknown>") for idx in sorted_indices]  # Sorted moves by index
 
     # Find the first legal move from the sorted moves
-    for move, prob in zip(sorted_moves, sorted_probabilities):
-        if move in [board.san(legal_move) for legal_move in board.legal_moves]:
-            return move, prob, list(zip(sorted_moves, sorted_probabilities))  # Return the best move and sorted list
+    for move_san, prob in zip(sorted_moves, sorted_probabilities):
+        try:
+            move_uci = board.parse_san(move_san).uci()
+            if move_uci in [m.uci() for m in board.legal_moves]:
+                return move_uci, prob, list(zip(sorted_moves, sorted_probabilities))  # Return UCI move
+        except ValueError:
+            continue  # Skip invalid SAN moves
+
+    # Fallback if no legal moves are found
+    return None, 0, list(zip(sorted_moves, sorted_probabilities))
 
 def setup_and_predict_move(model_path, move_to_id_path, id_to_move_path, move_history):
     """
@@ -98,12 +105,14 @@ def setup_and_predict_move(model_path, move_to_id_path, id_to_move_path, move_hi
     )
 
     # Apply the move to the board
-    if predicted_move in [board.san(move) for move in board.legal_moves]:
-        board.push_san(predicted_move)
+    if predicted_move:
+        move_obj = chess.Move.from_uci(predicted_move)
+        board.push(move_obj)
     else:
         # Fallback to a random legal move
-        predicted_move = random.choice([board.san(move) for move in board.legal_moves])
-        board.push_san(predicted_move)
+        fallback_move = random.choice(list(board.legal_moves))
+        board.push(fallback_move)
+        predicted_move = fallback_move.uci()
 
     return predicted_move, predicted_move_prob, board, sorted_probabilities
 
