@@ -110,6 +110,7 @@ def setup_and_predict_move(model_path, move_to_id_path, id_to_move_path, move_hi
         board.push(move_obj)
     else:
         # Fallback to a random legal move
+        print("Fallback to random move for no legal moves.")
         fallback_move = random.choice(list(board.legal_moves))
         board.push(fallback_move)
         predicted_move = fallback_move.uci()

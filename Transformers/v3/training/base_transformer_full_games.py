@@ -1,4 +1,17 @@
-#loss: 5.6417 - accuracy: 0.0451 - val_loss: 5.6630 - val_accuracy: 0.0462
+"""
+Transformer-Based Chess Move Prediction
+
+This script:
+1. Filters chess games by ELO ranges from a PGN file.
+2. Balances datasets using weighted sampling based on ELO ranges.
+3. Builds a vocabulary of chess moves and tokenizes games.
+4. Prepares training and validation datasets for a Transformer model.
+5. Trains and evaluates the model for next-move prediction.
+6. Saves the trained model and vocabulary mappings for future use.
+
+Results:
+- loss: 5.6417 - accuracy: 0.0451 - val_loss: 5.6630 - val_accuracy: 0.0462
+"""
 import chess.pgn
 import json
 from collections import defaultdict
@@ -10,8 +23,17 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Function to count games by ELO range
 def count_games_by_elo(pgn_file, elo_ranges):
+    """
+    Count the number of games within specified ELO ranges.
+
+    Args:
+        pgn_file (str): Path to the PGN file.
+        elo_ranges (list of tuples): ELO ranges (e.g., [(0, 1000), (1000, 1500)]).
+
+    Returns:
+        dict: A dictionary mapping ELO ranges to game counts.
+    """
     counts = {f"{range_[0]}-{range_[1]}": 0 for range_ in elo_ranges}
     with open(pgn_file, "r") as file:
         while True:
@@ -27,14 +49,32 @@ def count_games_by_elo(pgn_file, elo_ranges):
                         break
     return counts
 
-# Function to calculate class weights based on ELO counts
 def calculate_class_weights(elo_counts):
+    """
+    Calculate class weights for balancing ELO ranges.
+
+    Args:
+        elo_counts (dict): A dictionary of ELO counts.
+
+    Returns:
+        dict: A dictionary of class weights for each ELO range.
+    """
     total_games = sum(elo_counts.values())
     num_classes = len(elo_counts)
     return {i: total_games / (num_classes * count) for i, count in enumerate(elo_counts.values())}
 
-# Function to extract games by ELO range
 def extract_games_by_elo(pgn_file, elo_range, max_games):
+    """
+    Extract games within a specific ELO range.
+
+    Args:
+        pgn_file (str): Path to the PGN file.
+        elo_range (tuple): ELO range (low, high).
+        max_games (int): Maximum number of games to extract.
+
+    Returns:
+        list: List of games, each as a list of SAN moves.
+    """
     games = []
     with open(pgn_file, "r") as file:
         while len(games) < max_games:
@@ -54,8 +94,16 @@ def extract_games_by_elo(pgn_file, elo_range, max_games):
                         games.append(moves)
     return games
 
-# Build vocabulary from all games
 def build_vocab(games):
+    """
+    Build a vocabulary mapping chess moves to IDs.
+
+    Args:
+        games (list): List of games, each as a list of SAN moves.
+
+    Returns:
+        tuple: A tuple containing `move_to_id` and `id_to_move` mappings.
+    """
     vocab = defaultdict(int)
     for game in games:
         for move in game:
@@ -64,8 +112,17 @@ def build_vocab(games):
     id_to_move = {idx: move for move, idx in move_to_id.items()}
     return move_to_id, id_to_move
 
-# Preprocess games for next move prediction
 def preprocess_games_for_next_move(games, move_to_id):
+    """
+    Prepare game data for next-move prediction.
+
+    Args:
+        games (list): List of games, each as a list of SAN moves.
+        move_to_id (dict): Mapping from SAN moves to IDs.
+
+    Returns:
+        tuple: Tokenized inputs, outputs, and max sequence length.
+    """
     inputs, outputs = [], []
     for game in games:
         tokenized_game = [move_to_id[move] for move in game]
@@ -77,8 +134,20 @@ def preprocess_games_for_next_move(games, move_to_id):
     outputs = np.array(outputs)
     return inputs, outputs, max_length
 
-# Build the transformer model
 def build_transformer_model(vocab_size, max_length, embed_dim=128, num_heads=4, ff_dim=128):
+    """
+    Build a transformer model for next-move prediction.
+
+    Args:
+        vocab_size (int): Size of the vocabulary.
+        max_length (int): Maximum sequence length for input.
+        embed_dim (int): Embedding dimension.
+        num_heads (int): Number of attention heads.
+        ff_dim (int): Dimension of feedforward layers.
+
+    Returns:
+        tf.keras.Model: Compiled transformer model.
+    """
     inputs = Input(shape=(max_length,), name="move_input")
     x = Embedding(vocab_size, embed_dim, name="move_embedding")(inputs)
     x = LayerNormalization()(x)
@@ -96,8 +165,20 @@ def build_transformer_model(vocab_size, max_length, embed_dim=128, num_heads=4, 
     model = Model(inputs, outputs, name="transformer_next_move")
     return model
 
-# Training pipeline
-def train_next_move_model_with_weights(pgn_file, elo_ranges, batch_size=64, epochs=10):
+def train_next_move_model_with_weights(pgn_file, elo_ranges, output_dir, batch_size=64, epochs=10):
+    """
+    Train a next-move prediction model using weighted ELO data.
+
+    Args:
+        pgn_file (str): Path to the PGN file.
+        elo_ranges (list of tuples): ELO ranges.
+        output_dir (str): Directory to save the model and vocabulary files.
+        batch_size (int): Training batch size.
+        epochs (int): Number of training epochs.
+
+    Returns:
+        tuple: Training history, trained model, move_to_id, id_to_move.
+    """
     print("Counting games by ELO range...")
     elo_counts = count_games_by_elo(pgn_file, elo_ranges)
     print("ELO Counts:", elo_counts)
@@ -116,9 +197,9 @@ def train_next_move_model_with_weights(pgn_file, elo_ranges, batch_size=64, epoc
     inputs, outputs, max_length = preprocess_games_for_next_move(balanced_games, move_to_id)
 
     # Save vocabularies
-    with open("models/base_transformer_full_games_15k_games_Models/move_to_id.json", "w") as f:
+    with open(f"{output_dir}/move_to_id.json", "w") as f:
         json.dump(move_to_id, f)
-    with open("models/base_transformer_full_games_15k_games_Models/id_to_move.json", "w") as f:
+    with open(f"{output_dir}/id_to_move.json", "w") as f:
         json.dump(id_to_move, f)
 
     # Train-test split
@@ -131,10 +212,11 @@ def train_next_move_model_with_weights(pgn_file, elo_ranges, batch_size=64, epoc
 
     # Train the model
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath="models/base_transformer_full_games_15k_games_Models/model_checkpoint.tf",
+        filepath=f"{output_dir}/model_checkpoint.tf",
         save_best_only=True,
         save_format="tf",
     )
+
     history = model.fit(
         X_train,
         y_train,
@@ -145,30 +227,44 @@ def train_next_move_model_with_weights(pgn_file, elo_ranges, batch_size=64, epoc
     )
 
     # Save the model
-    model.save("models/base_transformer_full_games_15k_games_Models/next_move_model.tf")
+    model.save(f"{output_dir}/next_move_model.tf")
     return history, model, move_to_id, id_to_move
 
+def plot_training_history(history):
+    """
+    Plot training and validation loss and accuracy from the model training history.
 
-pgn_file = "../../PGN Games/partial_lichess_games_15k_filtered.pgn"
-elo_ranges = [(0, 1000), (1000, 1500), (1500, 2000), (2000, 4000)]
-history, model, move_to_id, id_to_move = train_next_move_model_with_weights(pgn_file, elo_ranges)
+    Args:
+        history (tf.keras.callbacks.History): Training history object returned by the model's `fit` method.
+    """
+    # Plot training and validation loss
+    plt.figure(figsize=(12, 6))
+    plt.plot(history.history["loss"], label="Training Loss")
+    plt.plot(history.history["val_loss"], label="Validation Loss")
+    plt.title("Training and Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
 
-# Plot training and validation loss
-plt.figure(figsize=(12, 6))
-plt.plot(history.history["loss"], label="Training Loss")
-plt.plot(history.history["val_loss"], label="Validation Loss")
-plt.title("Training and Validation Loss")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.legend()
-plt.show()
+    # Plot training and validation accuracy
+    plt.figure(figsize=(12, 6))
+    plt.plot(history.history["accuracy"], label="Training Accuracy")
+    plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
+    plt.title("Training and Validation Accuracy")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.legend()
+    plt.show()
 
-# Plot training and validation accuracy
-plt.figure(figsize=(12, 6))
-plt.plot(history.history["accuracy"], label="Training Accuracy")
-plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
-plt.title("Training and Validation Accuracy")
-plt.xlabel("Epoch")
-plt.ylabel("Accuracy")
-plt.legend()
-plt.show()
+if __name__ == "__main__":
+    # Define file paths and ELO ranges
+    pgn_file = "../../../PGN Games/pgns/partial_lichess_games_15k_filtered.pgn"
+    elo_ranges = [(0, 1000), (1000, 1500), (1500, 2000), (2000, 4000)]
+    output_dir = "../models/base_transformer_full_games_15k_games_Models"
+
+    # Train the next-move prediction model
+    history, model, move_to_id, id_to_move = train_next_move_model_with_weights(pgn_file, elo_ranges, output_dir)
+
+    # Plot training results
+    plot_training_history(history)

@@ -22,6 +22,7 @@ import tensorflow as tf
 import chess
 import random
 import json
+import numpy as np
 
 
 def load_mappings(move_to_id_path, id_to_move_path):
@@ -59,7 +60,7 @@ def predict_next_move(model, move_history, move_to_id, id_to_move, max_length, b
         board (chess.Board): Current board state.
 
     Returns:
-        str: Predicted SAN move.
+        tuple: Predicted move (UCI), probability, and a list of all predictions with probabilities.
     """
     # Tokenize the move history
     tokenized_history = [move_to_id.get(move, 0) for move in move_history]
@@ -69,20 +70,31 @@ def predict_next_move(model, move_history, move_to_id, id_to_move, max_length, b
 
     # Predict the next move probabilities
     predictions = model.predict(padded_history, verbose=0)
-    move_probabilities = predictions[0]
+
+    # Extract probabilities for the last position in the sequence
+    if len(predictions.shape) == 3:
+        move_probabilities = predictions[0, -1]
+    elif len(predictions.shape) == 2:
+        move_probabilities = predictions[0]
+    else:
+        raise ValueError("Unexpected shape of predictions: {}".format(predictions.shape))
 
     # Sort moves by predicted probability
-    sorted_indices = tf.argsort(move_probabilities, direction="DESCENDING").numpy()
+    sorted_indices = np.argsort(move_probabilities)[::-1]
+    sorted_probabilities = [move_probabilities[idx] for idx in sorted_indices]
+    sorted_moves = [id_to_move.get(int(idx), "<unknown>") for idx in sorted_indices]
 
-    # Find the first legal move from the predictions
-    for predicted_move_id in sorted_indices:
-        predicted_move = id_to_move.get(predicted_move_id, "<unknown>")
-        if predicted_move in [board.san(move) for move in board.legal_moves]:
-            return predicted_move
+    # Find the first legal move from the sorted moves
+    for move_san, prob in zip(sorted_moves, sorted_probabilities):
+        try:
+            move_uci = board.parse_san(move_san).uci()
+            if move_uci in [m.uci() for m in board.legal_moves]:
+                return move_uci, prob, list(zip(sorted_moves, sorted_probabilities))
+        except ValueError:
+            continue
 
-    # Fallback: return a random legal move if no predicted moves are legal
-    return random.choice([board.san(move) for move in board.legal_moves])
-
+    # Fallback if no legal moves are found
+    return None, 0, list(zip(sorted_moves, sorted_probabilities))
 
 def setup_and_predict_move(model_path, move_to_id_path, id_to_move_path, move_history):
     """
@@ -110,18 +122,20 @@ def setup_and_predict_move(model_path, move_to_id_path, id_to_move_path, move_hi
         board.push_san(move)
 
     # Predict the next move
-    predicted_move = predict_next_move(model, move_history, move_to_id, id_to_move, max_length, board)
+    predicted_move, predicted_move_prob, sorted_probabilities = predict_next_move(model, move_history, move_to_id, id_to_move, max_length, board)
 
     # Apply the move to the board
-    if predicted_move in [board.san(move) for move in board.legal_moves]:
-        board.push_san(predicted_move)
+    if predicted_move:
+        move_obj = chess.Move.from_uci(predicted_move)
+        board.push(move_obj)
     else:
         # Fallback to a random legal move
-        predicted_move = random.choice([board.san(move) for move in board.legal_moves])
-        board.push_san(predicted_move)
+        print("Fallback to random move for no legal moves.")
+        fallback_move = random.choice(list(board.legal_moves))
+        board.push(fallback_move)
+        predicted_move = fallback_move.uci()
 
-    return predicted_move, board
-
+    return predicted_move, predicted_move_prob, board, sorted_probabilities
 
 if __name__ == "__main__":
     # Paths to model and mappings
@@ -133,10 +147,12 @@ if __name__ == "__main__":
     move_history = ["d4", "c5", "d5", "Nf6"]
 
     # Predict the next move
-    predicted_move, updated_board = setup_and_predict_move(
+    predicted_move, predicted_move_prob, updated_board, sorted_probabilities = setup_and_predict_move(
         model_path, move_to_id_path, id_to_move_path, move_history
     )
 
-    # Display the result
-    print(f"Predicted move: {predicted_move}")
+    print(f"Predicted move: {predicted_move} : {predicted_move_prob:.6f}")
+    print("Top 10 Sorted probabilities with moves:")
+    for move, prob in sorted_probabilities[:10]:  # Slicing the list to get top 10 entries
+        print(f"{move}: {prob:.6f}")
     print(f"Updated board after move:\n{updated_board}")

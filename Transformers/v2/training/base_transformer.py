@@ -322,17 +322,20 @@ def build_transformer_with_board_features_and_phases(vocab_size, max_length, emb
     model = tf.keras.Model(inputs=[move_input, board_input, phase_input], outputs=last_logits, name="transformer_with_phases")
     return model
 
-def main(pgn_file, model_dir):
+def train_next_move_model(pgn_file, elo_ranges, output_dir, batch_size=64, epochs=10):
     """
-    Main function to preprocess data, train, and evaluate the Transformer model.
+    Train a next-move prediction model using weighted ELO data.
 
     Args:
-        pgn_file (str): Path to the PGN file containing the dataset.
-        model_dir (str): Path to save the trained model.
+        pgn_file (str): Path to the PGN file.
+        elo_ranges (list of tuples): ELO ranges.
+        output_dir (str): Directory to save the model and vocabulary files.
+        batch_size (int): Training batch size.
+        epochs (int): Number of training epochs.
+
+    Returns:
+        tuple: Training history, trained model, move_to_id, id_to_move.
     """
-
-    elo_ranges = [(0, 1000), (1000, 1500), (1500, 2000), (2000, 4000)]
-
     # Count games for each ELO range
     print("Counting games by ELO range...")
     elo_counts = count_games_by_elo(pgn_file, elo_ranges)
@@ -346,10 +349,9 @@ def main(pgn_file, model_dir):
     # Build vocabulary
     move_to_id, id_to_move = build_vocab(balanced_games)
 
-    # Save the vocabularies
-    with open(model_dir + "/move_to_id.json", "w") as f:
+    with open(f"{output_dir}/move_to_id.json", "w") as f:
         json.dump(move_to_id, f)
-    with open(model_dir +"/id_to_move.json", "w") as f:
+    with open(f"{output_dir}/id_to_move.json", "w") as f:
         json.dump(id_to_move, f)
 
     # Calculate max_length based on the longest game in the dataset
@@ -357,7 +359,6 @@ def main(pgn_file, model_dir):
     print(f"Max sequence length: {max_length}")
 
     # Training parameters
-    batch_size = 32
     board_dim = 768
     vocab_size = len(move_to_id)
 
@@ -392,9 +393,9 @@ def main(pgn_file, model_dir):
     # Callbacks: Early stopping and model checkpointing
     early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=model_dir + "/model_checkpoint",
+        filepath=f"{output_dir}/model_checkpoint.tf",
         save_best_only=True,
-        save_format="h5",
+        save_format="tf",
     )
 
     history = model.fit(
@@ -402,14 +403,25 @@ def main(pgn_file, model_dir):
         validation_data=val_gen,
         steps_per_epoch=steps_per_epoch,
         validation_steps=validation_steps,
-        epochs=10,
+        epochs=epochs,
         callbacks=[early_stopping, checkpoint_callback]
     )
 
+    # Save the model
+    model.save(f"{output_dir}/next_move_model.tf")
+    return history, model, move_to_id, id_to_move
+
+def plot_training_history(history):
+    """
+    Plot training and validation loss and accuracy from the model training history.
+
+    Args:
+        history (tf.keras.callbacks.History): Training history object returned by the model's `fit` method.
+    """
     # Plot training and validation loss
     plt.figure(figsize=(12, 6))
-    plt.plot(history.history['loss'], label='Training Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.plot(history.history["loss"], label="Training Loss")
+    plt.plot(history.history["val_loss"], label="Validation Loss")
     plt.title("Training and Validation Loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
@@ -418,8 +430,8 @@ def main(pgn_file, model_dir):
 
     # Plot training and validation accuracy
     plt.figure(figsize=(12, 6))
-    plt.plot(history.history['sparse_categorical_accuracy'], label='Training Accuracy')
-    plt.plot(history.history['val_sparse_categorical_accuracy'], label='Validation Accuracy')
+    plt.plot(history.history["accuracy"], label="Training Accuracy")
+    plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
     plt.title("Training and Validation Accuracy")
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
@@ -428,4 +440,11 @@ def main(pgn_file, model_dir):
 
 if __name__ == "__main__":
     pgn_file = "../../../PGN Games/pgns/partial_lichess_games_15k_filtered.pgn"
-    model_dir = "../models/base_transformer_15k_games_Models"
+    output_dir = "../models/base_transformer_15k_games_Models"
+    elo_ranges = [(0, 1000), (1000, 1500), (1500, 2000), (2000, 4000)]
+
+    # Train the next-move prediction model
+    history, model, move_to_id, id_to_move = train_next_move_model(pgn_file, elo_ranges, output_dir)
+
+    # Plot training results
+    plot_training_history(history)
