@@ -1,3 +1,28 @@
+"""
+Script to Predict the Next Move in a Chess Game Using a Trained TensorFlow Model
+
+Overview:
+This script leverages a pre-trained TensorFlow model to predict the next move in a chess game. It processes the current board state and move history into the required input format for the model, ensuring that predictions are both valid and legal according to the chess rules.
+
+Key Features:
+1. Loads a trained TensorFlow model and move-to-index mappings from JSON files.
+2. Encodes the current board state (in FEN format) and move history into a format suitable for model inference.
+3. Predicts the next move while validating its legality on the provided board state.
+4. Supports configurable weights for policy (move prediction) and value (board evaluation) outputs to fine-tune prediction scoring.
+
+Functions:
+- `load_mappings`: Loads the move-to-index and index-to-move mappings from JSON files.
+- `encode_board`: Encodes the current board state (FEN) into a tensor format required by the model.
+- `encode_move_history`: Converts a move history into a fixed-length sequence for model input.
+- `is_valid_uci_move`: Validates whether a UCI move string is well-formed and exists in the move mapping.
+- `predict_next_move`: Generates the best move prediction based on model output and board state legality.
+
+Usage Instructions:
+1. Update the file paths for the trained model and JSON mappings (`model_path` and `move_index_map`).
+2. Provide the board state (FEN) and move history as input for predictions.
+3. Execute the script to obtain the best predicted move and the top legal moves with their scores.
+"""
+
 import chess
 import numpy as np
 import tensorflow as tf
@@ -27,15 +52,6 @@ def top_3_accuracy(y_true, y_pred):
     y_true_one_hot = tf.one_hot(y_true, depth=num_classes)
     
     return tf.keras.metrics.top_k_categorical_accuracy(y_true=y_true_one_hot, y_pred=y_pred, k=3)
-
-model_path = "../models/checkpoints3/model_checkpoint.h5"
-custom_objects = {"top_3_accuracy": top_3_accuracy}
-model = load_model(model_path, custom_objects=custom_objects)
-
-# Load the move index map
-with open("../models/checkpoints3/id_to_move.json", "r") as f:
-    move_index_map = json.load(f)
-id_to_move = {v: k for k, v in move_index_map.items()}
 
 def encode_board(fen):
     """
@@ -99,20 +115,24 @@ def encode_move_history(moves, move_index_map, history_length=5):
         history_encoded = [0] * (history_length - len(history_encoded)) + history_encoded
     return np.array(history_encoded, dtype=np.int32)
 
-def is_valid_uci_move(move, move_index_map):
+def is_valid_uci_move(move, board):
     """
-    Check if a given UCI move string exists in the move index map.
+    Validate a UCI move string against the current board state.
 
     Args:
         move (str): The UCI move string to validate.
-        move_index_map (dict): Mapping of valid UCI moves to indices.
+        board (chess.Board): The current board state.
 
     Returns:
         bool: True if the move is valid, False otherwise.
     """
-    return move in move_index_map
+    try:
+        uci_move = chess.Move.from_uci(move)
+        return uci_move in board.legal_moves
+    except ValueError:
+        return False
 
-def predict_next_move(fen, moves, policy_weight=0.7, value_weight=0.3, history_length=5):
+def predict_next_move(fen, moves, model_path, id_to_move_path, policy_weight=0.7, value_weight=0.3, history_length=5):
     """
     Predict the next move based on policy output and board evaluation (value output).
 
@@ -128,6 +148,15 @@ def predict_next_move(fen, moves, policy_weight=0.7, value_weight=0.3, history_l
         list: Top legal moves with their scores.
         float: Board evaluation value (as predicted by the model).
     """
+
+    custom_objects = {"top_3_accuracy": top_3_accuracy}
+    model = load_model(model_path, custom_objects=custom_objects)
+
+    # Load the move index map
+    with open(id_to_move_path, "r") as f:
+        move_index_map = json.load(f)
+    id_to_move = {v: k for k, v in move_index_map.items()}
+
     board = chess.Board(fen)
     encoded_board = encode_board(fen)
     encoded_history = encode_move_history(moves, move_index_map, history_length)
@@ -153,13 +182,12 @@ def predict_next_move(fen, moves, policy_weight=0.7, value_weight=0.3, history_l
     # Filter and score legal moves
     legal_moves = []
     for move, score in zip(sorted_moves, sorted_scores):
-        if not is_valid_uci_move(move, move_index_map):
-            print(f"Skipped invalid move: {move}")
+        if not is_valid_uci_move(move, board):
+            print(f"Skipped invalid or illegal move: {move}")
             continue
         uci_move = chess.Move.from_uci(move)
-        if uci_move in board.legal_moves:
-            combined_score = policy_weight * score + value_weight * value_output
-            legal_moves.append((move, combined_score))
+        combined_score = policy_weight * score + value_weight * value_output
+        legal_moves.append((move, combined_score))
 
     # Sort legal moves by combined score
     legal_moves.sort(key=lambda x: x[1], reverse=True)
@@ -174,7 +202,10 @@ if __name__ == "__main__":
     fen = "r2q1rk1/pp1nbppp/3p1n2/2p1p3/2P1P3/2N1BN2/PPQ2PPP/R3K2R w KQ - 0 10"
     moves = ["e2e4", "e7e5", "g1f3", "d7d6", "c2c4", "g8f6", "b1c3", "f8e7", "f1e2", "e8g8", "e1g1"]
 
-    best_move, legal_moves, position_value = predict_next_move(fen, moves)
+    model_path = "../models/checkpoints4/model_checkpoint.h5"
+    id_to_move_path = "../models/checkpoints4/id_to_move.json"
+
+    best_move, legal_moves, position_value = predict_next_move(fen, moves, model_path, id_to_move_path)
 
     print(f"Best move: {best_move}")
     print("Top legal moves with scores:")

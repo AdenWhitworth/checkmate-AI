@@ -23,9 +23,9 @@ Metrics:
 - Value Output Mean Absolute Error (MAE): MAE for board evaluation predictions.
 
 Results:
--Checkpoints 2 (less processed games): loss: 5.6935 - policy_output_loss: 5.6935 - value_output_loss: 1.2366e-05 - policy_output_accuracy: 0.0421 - policy_output_top_3_accuracy: 0.1025 - value_output_mae: 0.0023 - val_loss: 5.7074 - val_policy_output_loss: 5.7074 - val_value_output_loss: 1.1315e-05 - val_policy_output_accuracy: 0.0418 - val_policy_output_top_3_accuracy: 0.1010 - val_value_output_mae: 0.0023
--Checkpoints 3 (more processed games): loss: 5.5582 - policy_output_loss: 5.5582 - value_output_loss: 1.2631e-05 - policy_output_accuracy: 0.0474 - policy_output_top_3_accuracy: 0.1138 - value_output_mae: 0.0025
-- Checkpoints 4 (restructured index map)
+- Checkpoints 2 (less processed games): loss: 5.6935 - policy_output_loss: 5.6935 - value_output_loss: 1.2366e-05 - policy_output_accuracy: 0.0421 - policy_output_top_3_accuracy: 0.1025 - value_output_mae: 0.0023 - val_loss: 5.7074 - val_policy_output_loss: 5.7074 - val_value_output_loss: 1.1315e-05 - val_policy_output_accuracy: 0.0418 - val_policy_output_top_3_accuracy: 0.1010 - val_value_output_mae: 0.0023
+- Checkpoints 3 (more processed games): loss: 5.5582 - policy_output_loss: 5.5582 - value_output_loss: 1.2631e-05 - policy_output_accuracy: 0.0474 - policy_output_top_3_accuracy: 0.1138 - value_output_mae: 0.0025
+- Checkpoints 4 (restructured index map): loss: 5.6164 - policy_output_loss: 5.6163 - value_output_loss: 6.2147e-04 - policy_output_accuracy: 0.0448 - policy_output_top_3_accuracy: 0.1081 - value_output_mae: 0.0187 - val_loss: 5.6163 - val_policy_output_loss: 5.6162 - val_value_output_loss: 4.3366e-04 - val_policy_output_accuracy: 0.0455 - val_policy_output_top_3_accuracy: 0.1093 - val_value_output_mae: 0.0162
 """
 
 import os
