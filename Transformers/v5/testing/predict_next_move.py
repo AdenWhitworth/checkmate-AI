@@ -20,6 +20,7 @@ import json
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import chess
+import os
 
 def load_model_and_mappings(move_to_idx_file, model_file):
     """
@@ -85,15 +86,14 @@ def is_legal_move(fen, move):
     board = chess.Board(fen)
     return chess.Move.from_uci(move) in board.legal_moves
 
-def predict_next_move_and_outcome(fen, moves, MOVE_TO_IDX_FILE, MODEL_FILE, max_move_length=28):
+def predict_next_move_and_outcome(fen, moves, CHECKPOINT_DIR, max_move_length=28):
     """
     Predict the next move and game outcome for a given chess position and move history.
 
     Args:
         fen (str): FEN string representing the current board state.
         moves (list): List of UCI moves leading up to the current board state.
-        MOVE_TO_IDX_FILE (str): Path to the JSON file containing the move-to-index mapping.
-        MODEL_FILE (str): Path to the trained TensorFlow model file.
+        CHECKPOINT_DIR (str): Path to the model checkpoint directory.
         max_move_length (int, optional): Maximum length for move sequences. Defaults to 28.
 
     Returns:
@@ -101,7 +101,7 @@ def predict_next_move_and_outcome(fen, moves, MOVE_TO_IDX_FILE, MODEL_FILE, max_
             - predicted_move (str): The next move in UCI format.
             - predicted_outcome (str): The predicted game outcome as one of ["Loss", "Draw", "Win"].
     """
-    model, move_to_idx, idx_to_move = load_model_and_mappings(MOVE_TO_IDX_FILE, MODEL_FILE)
+    model, move_to_idx, idx_to_move = load_model_and_mappings(os.path.join(CHECKPOINT_DIR, "move_to_idx.json"), os.path.join(CHECKPOINT_DIR, "model_final_with_outcome.h5"))
 
     # Prepare tensors
     fen_tensor = np.expand_dims(fen_to_tensor(fen), axis=0)
@@ -125,15 +125,13 @@ def predict_next_move_and_outcome(fen, moves, MOVE_TO_IDX_FILE, MODEL_FILE, max_
     return predicted_move, predicted_outcome
 
 if __name__ == "__main__":
-    # File paths
-    MOVE_TO_IDX_FILE = "../models/checkpoints/move_to_idx.json"
-    MODEL_FILE = "../models/checkpoints/model_final_with_outcome.h5"
+    CHECKPOINT_DIR = "../models/checkpoints"
 
     # Example FEN and move sequence
     fen = "rnbqkb1r/pp2pppp/3p4/8/3nP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 5"
     moves = ["e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4"]
 
     # Predict next move and outcome
-    predicted_move, predicted_outcome = predict_next_move_and_outcome(fen, moves, MOVE_TO_IDX_FILE, MODEL_FILE)
+    predicted_move, predicted_outcome = predict_next_move_and_outcome(fen, moves, CHECKPOINT_DIR)
     print(f"Predicted next move: {predicted_move}")
     print(f"Predicted game outcome: {predicted_outcome}")

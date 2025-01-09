@@ -153,16 +153,26 @@ def load_preprocessed_data(output_dir):
         move_to_idx = json.load(f)
     return fens, moves, labels, outcomes, move_to_idx
 
-
-
-
-
-# Split data
-X_fens_train, X_fens_test, X_moves_train, X_moves_test, X_outcomes_train, X_outcomes_test, y_train, y_test = train_test_split(
-    fens, moves, game_outcomes, labels, test_size=0.2, random_state=42
-)
-
 def create_transformer_model(input_fen_shape, input_move_shape, num_moves):
+    """
+    Create a Transformer-based model for chess move and game outcome prediction.
+
+    The model takes two inputs:
+    1. FEN (Forsyth-Edwards Notation) tensor representing the chessboard state.
+    2. Move sequence tensor representing previous moves in UCI (Universal Chess Interface) format.
+
+    Outputs:
+    1. `next_move_output`: Predicted next move as a probability distribution over all possible moves.
+    2. `outcome_output`: Predicted game outcome (Win, Draw, Loss) as a probability distribution.
+
+    Args:
+        input_fen_shape (tuple): Shape of the FEN input tensor, e.g., (64,) or (8, 8, 13).
+        input_move_shape (tuple): Shape of the move sequence input tensor, e.g., (max_sequence_length,).
+        num_moves (int): Total number of unique possible moves.
+
+    Returns:
+        tensorflow.keras.Model: A compiled Transformer-based model for chess prediction tasks.
+    """
     fen_input = Input(shape=input_fen_shape, name="fen_input")
     move_input = Input(shape=input_move_shape, name="move_input")
 
@@ -202,8 +212,25 @@ def create_transformer_model(input_fen_shape, input_move_shape, num_moves):
     model = Model(inputs=[fen_input, move_input], outputs=[next_move_output, outcome_pred])
     return model
 
-# Learning rate scheduler
 def lr_scheduler(epoch, lr):
+    """
+    Cosine decay learning rate scheduler.
+
+    Adjusts the learning rate dynamically during training to improve convergence and prevent overfitting.
+
+    Args:
+        epoch (int): The current epoch number.
+        lr (float): The current learning rate.
+
+    Returns:
+        float: Adjusted learning rate for the current epoch.
+
+    Parameters:
+    -----------
+    - `initial_lr`: The starting learning rate (default is 1e-4).
+    - `decay_epochs`: Total number of epochs over which decay occurs (default is 10).
+    - `alpha`: The final learning rate as a fraction of the initial learning rate (default is 0.1).
+    """
     initial_lr = 1e-4
     decay_epochs = 10  # Total number of epochs
     alpha = 0.1  # Final learning rate as a fraction of the initial learning rate
@@ -242,6 +269,11 @@ def train_model(PROCESSED_JSON_PATH, CHECKPOINT_DIR, FENS_FILE, MOVES_FILE, LABE
     else:
         fens, moves, labels, outcomes, move_to_idx = preprocess_data(PROCESSED_JSON_PATH)
         save_preprocessed_data(fens, moves, labels, outcomes, move_to_idx, CHECKPOINT_DIR)
+
+    # Split data
+    X_fens_train, X_fens_test, X_moves_train, X_moves_test, X_outcomes_train, X_outcomes_test, y_train, y_test = train_test_split(
+        fens, moves, outcomes, labels, test_size=0.2, random_state=42
+    )
 
     input_fen_shape = (fens.shape[1],)
     input_move_shape = (moves.shape[1],)
