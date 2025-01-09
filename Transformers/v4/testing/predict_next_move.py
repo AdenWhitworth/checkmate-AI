@@ -183,7 +183,6 @@ def predict_next_move(fen, moves, model_path, id_to_move_path, policy_weight=0.7
     legal_moves = []
     for move, score in zip(sorted_moves, sorted_scores):
         if not is_valid_uci_move(move, board):
-            print(f"Skipped invalid or illegal move: {move}")
             continue
         uci_move = chess.Move.from_uci(move)
         combined_score = policy_weight * score + value_weight * value_output
