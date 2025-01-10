@@ -133,9 +133,14 @@ def is_legal_move(fen, move):
     board = chess.Board(fen)
     return chess.Move.from_uci(move) in board.legal_moves
 
-def predict_middle_move_weighted_all(fen, moves, model, move_to_idx, idx_to_move, max_move_length=195, top_n=5, weight_prob=0.4, weight_eval=0.6, mate_eval_priority=100):
+def predict_middle_move_weighted_all(
+    fen, moves, model, move_to_idx, idx_to_move,
+    max_move_length=195, top_n=5, weight_prob=0.4, weight_eval=0.6,
+    mate_eval_priority=100, max_repetition=2, repetition_penalty=0.1,
+    max_cycle_length=2, cycle_penalty=0.5
+):
     """
-    Predict and evaluate all legal moves in a position with weighted scoring.
+    Predict and evaluate all legal moves in a position with weighted scoring, repetition, and cycle tracking.
 
     Args:
         fen (str): FEN string of the current position.
@@ -148,6 +153,10 @@ def predict_middle_move_weighted_all(fen, moves, model, move_to_idx, idx_to_move
         weight_prob (float): Weight for the move probability in scoring.
         weight_eval (float): Weight for the evaluation score in scoring.
         mate_eval_priority (float): Priority factor for mate evaluations.
+        max_repetition (int): Number of sequential repetitions allowed before penalty.
+        repetition_penalty (float): Penalty factor for repeated moves.
+        max_cycle_length (int): Maximum length of cycles to detect.
+        cycle_penalty (float): Penalty factor for detected cycles.
 
     Returns:
         list: A sorted list of top moves with evaluations.
@@ -158,6 +167,12 @@ def predict_middle_move_weighted_all(fen, moves, model, move_to_idx, idx_to_move
 
     # Predict using the model
     move_pred, cp_preds, mate_preds = model.predict([fen_tensor, moves_tensor])
+
+    # Track repeated moves in sequence
+    repetitions = track_repetitions(moves, max_repetition)
+
+    # Detect repeated move cycles
+    cycles = detect_move_cycles(moves, max_cycle_length)
 
     # Sort moves by predicted probabilities
     sorted_indices = np.argsort(move_pred[0])[::-1]
@@ -181,12 +196,10 @@ def predict_middle_move_weighted_all(fen, moves, model, move_to_idx, idx_to_move
             
             # Determine final evaluation score
             if abs(mate_eval) < mate_eval_priority and mate_eval != 0:
-                # Use mate_score if decisive mate is detected
                 eval_score = mate_score
                 prob_weight = 0.2  # Deprioritize probability
                 eval_weight = 0.8  # Prioritize evaluation
             else:
-                # Use cp_score otherwise
                 eval_score = cp_score
                 prob_weight = weight_prob
                 eval_weight = weight_eval
@@ -194,7 +207,16 @@ def predict_middle_move_weighted_all(fen, moves, model, move_to_idx, idx_to_move
             # Weighted score calculation
             weighted_score = prob_weight * move_pred[0][idx] + eval_weight * eval_score
 
-            # Avoid negative scores (optional adjustment)
+            # Apply repetition penalty if the move is repeated
+            if predicted_move in repetitions:
+                weighted_score -= repetition_penalty * repetitions[predicted_move]
+
+            # Apply cycle penalty if the move is part of a detected cycle
+            for cycle, count in cycles.items():
+                if predicted_move in cycle:
+                    weighted_score -= cycle_penalty * count
+
+            # Avoid negative scores
             weighted_score = max(weighted_score, 0)
 
             top_moves.append({
@@ -297,31 +319,198 @@ def alpha_beta_pruning(game_moves, depth, alpha, beta, is_maximizing, model, mov
     transposition_table[fen] = (best_score, best_move.uci() if isinstance(best_move, chess.Move) else best_move)
     return best_score, best_move.uci() if isinstance(best_move, chess.Move) else best_move
 
-def predict_middle_move_weighted(fen, moves, model, move_to_idx, idx_to_move, max_move_length=195, top_n=5, weight_prob=0.4, weight_eval=0.6, mate_eval_priority=100):
+# Add this function to track repetitive moves
+def track_repetitions(move_history, max_repetition=2):
     """
-    Predict the best move using weighted probability and evaluation scoring.
+    Track consecutive repetitions in the move history.
+
+    Args:
+        move_history (list): List of UCI moves played so far.
+        max_repetition (int): Number of times a move can repeat before being penalized.
+
+    Returns:
+        dict: A dictionary where keys are repeated moves and values are the repetition counts.
+    """
+    repetitions = {}
+    sequence = []
+    for move in reversed(move_history):
+        if sequence and move != sequence[-1]:
+            break
+        sequence.append(move)
+
+    for move in sequence:
+        repetitions[move] = repetitions.get(move, 0) + 1
+
+    return {move: count for move, count in repetitions.items() if count >= max_repetition}
+
+def detect_move_cycles(move_history, max_cycle_length=2):
+    """
+    Detect repeated move cycles in the move history.
+
+    Args:
+        move_history (list): List of UCI moves played so far.
+        max_cycle_length (int): Maximum length of cycles to detect.
+
+    Returns:
+        dict: A dictionary with detected cycles and their counts.
+    """
+    cycle_counts = {}
+    history_len = len(move_history)
+
+    # Check for repeated patterns of moves
+    for cycle_length in range(1, max_cycle_length + 1):
+        if history_len < 2 * cycle_length:
+            continue
+
+        # Extract the most recent cycle_length moves
+        recent_moves = move_history[-cycle_length:]
+        prior_moves = move_history[-2 * cycle_length:-cycle_length]
+
+        if recent_moves == prior_moves:
+            cycle = tuple(recent_moves)
+            cycle_counts[cycle] = cycle_counts.get(cycle, 0) + 1
+
+    return cycle_counts
+
+def adjust_weights_by_material_count(piece_count):
+    """
+    Adjust weights based on the total number of pieces on the board.
+
+    Args:
+        piece_count (int): Total number of pieces on the board.
+
+    Returns:
+        tuple: (weight_prob, weight_eval) based on material count.
+    """
+    if piece_count < 25:
+        return 0, 1
+    else: 
+        return 0.7, 0.3
+    
+def count_pieces_from_fen(fen):
+    """
+    Count the total number of pieces on the board based on the FEN string.
 
     Args:
         fen (str): FEN string of the position.
-        moves (list): List of previous moves in UCI format.
-        model: Trained middle-game Transformer model.
-        move_to_idx (dict): Mapping of UCI moves to indices.
-        idx_to_move (dict): Mapping of indices to UCI moves.
-        max_move_length (int): Maximum sequence length for padding.
-        top_n (int): Number of top moves to return.
-        weight_prob (float): Weight for probability in scoring.
-        weight_eval (float): Weight for evaluation score in scoring.
-        mate_eval_priority (float): Priority factor for mate evaluations.
 
     Returns:
-        tuple: Best move and list of top moves with evaluations.
+        int: Total number of pieces on the board.
     """
+    piece_count = 0
+    board_part = fen.split()[0]  # Extract the board configuration part
+    for char in board_part:
+        if char.isalpha():  # Count only piece characters
+            piece_count += 1
+    return piece_count
+
+def predict_middle_move_weighted_priority(
+    fen, moves, model, move_to_idx, idx_to_move,
+    max_move_length=195, top_n=5, weight_prob=0.4, weight_eval=0.6,
+    mate_eval_priority=15, king_safety_penalty=0.3
+):
     fen_tensor = np.expand_dims(middle_fen_to_tensor(fen), axis=0)
     move_indices = uci_to_tensor(moves, move_to_idx)
     moves_tensor = pad_sequences([move_indices], maxlen=max_move_length, padding="post")
 
     # Predict using the model
     move_pred, cp_preds, mate_preds = model.predict([fen_tensor, moves_tensor])
+
+    # Normalize CP and Mate Evaluations
+    def normalize_cp(cp):
+        return max(min(cp / 500.0, 1), -1)
+
+    def normalize_mate(mate):
+        if abs(mate) < 0.01:
+            return 0
+        elif mate < 0:
+            return max(-1, mate / mate_eval_priority)
+        else:
+            return min(1, mate / mate_eval_priority)
+
+    # Determine game phase
+    board = chess.Board(fen)
+    is_endgame = len(board.piece_map()) < 14
+
+    # Sort moves by predicted probabilities
+    sorted_indices = np.argsort(move_pred[0])[::-1]
+    top_moves = []
+
+    for idx in sorted_indices:
+        predicted_move = idx_to_move[idx]
+        if chess.Move.from_uci(predicted_move) in board.legal_moves:
+            cp_raw = cp_preds[0][idx] * 1000.0
+            mate_raw = mate_preds[0][idx]
+
+            # Normalize evaluations
+            cp_eval = normalize_cp(cp_raw)
+            mate_eval = normalize_mate(mate_raw)
+
+            # Adjust weights for aggressive play in winning positions
+            if cp_eval > 1:
+                weight_prob += 0.2
+                weight_eval -= 0.1
+
+            # Endgame king safety consideration
+            if is_endgame:
+                king_safety_penalty += 0.1
+
+            # Blended evaluation
+            blended_eval = 0.8 * mate_eval + 0.4 * cp_eval
+            weighted_score = weight_prob * (move_pred[0][idx] ** 0.75) + weight_eval * blended_eval
+
+            # Penalize king exposure
+            if board.is_check():
+                weighted_score -= king_safety_penalty
+
+            # Append move details
+            top_moves.append({
+                "move": predicted_move,
+                "probability": move_pred[0][idx],
+                "cp_eval_raw": cp_raw,
+                "cp_eval_normalized": cp_eval,
+                "mate_eval_raw": mate_raw,
+                "mate_eval_normalized": mate_eval,
+                "blended_eval": blended_eval,
+                "weighted_score": max(weighted_score, 0),
+            })
+
+            if len(top_moves) == top_n:
+                break
+
+    # Sort top moves
+    top_moves = sorted(top_moves, key=lambda x: x["weighted_score"], reverse=True)
+    best_move = top_moves[0]["move"] if top_moves else None
+    return best_move, top_moves
+
+def predict_middle_move_weighted(
+    fen, moves, model, move_to_idx, idx_to_move,
+    max_move_length=195, top_n=5, weight_prob=0.4, weight_eval=0.6,
+    mate_eval_priority=15, max_repetition=2, repetition_penalty=0.5,
+    max_cycle_length=2, cycle_penalty=2
+):
+    fen_tensor = np.expand_dims(middle_fen_to_tensor(fen), axis=0)
+    move_indices = uci_to_tensor(moves, move_to_idx)
+    moves_tensor = pad_sequences([move_indices], maxlen=max_move_length, padding="post")
+
+    # Predict using the model
+    move_pred, cp_preds, mate_preds = model.predict([fen_tensor, moves_tensor])
+
+    # Normalize CP and Mate Evaluations
+    def normalize_cp(cp):
+        return max(min(cp / 500.0, 1), -1)  # Scale [-500, 500] to [-1, 1]
+
+    def normalize_mate(mate):
+        if abs(mate) < 0.01:
+            return 0
+        elif mate < 0:
+            return max(-1, mate / mate_eval_priority)
+        else:
+            return min(1, mate / mate_eval_priority)
+
+    # Track repeated moves and cycles
+    repetitions = track_repetitions(moves, max_repetition)
+    cycles = detect_move_cycles(moves, max_cycle_length)
 
     # Sort moves by predicted probabilities
     sorted_indices = np.argsort(move_pred[0])[::-1]
@@ -336,37 +525,60 @@ def predict_middle_move_weighted(fen, moves, model, move_to_idx, idx_to_move, ma
 
         # Check if the move is legal
         if chess.Move.from_uci(predicted_move) in board.legal_moves:
-            cp_eval = cp_preds[0][idx] * 1000.0  # Scale back to centipawns
-            mate_eval = mate_preds[0][idx]  # Raw mate eval in plies
-            
-            # Normalize evaluations
-            cp_score = cp_eval / 1000.0  # Scale to [-1, 1]
-            mate_score = -mate_eval / mate_eval_priority if mate_eval != 0 else 0.0
-            
-            # Determine final evaluation score
-            if abs(mate_eval) < mate_eval_priority and mate_eval != 0:
-                # Use mate_score if decisive mate is detected
-                eval_score = mate_score
-                prob_weight = 0.2  # Deprioritize probability
-                eval_weight = 0.8  # Prioritize evaluation
+            # Raw values
+            cp_raw = cp_preds[0][idx] * 1000.0  # Convert CP to centipawns
+            mate_raw = mate_preds[0][idx]       # Mate evaluation in plies
+
+            # Normalized values
+            cp_eval = normalize_cp(cp_raw)
+            mate_eval = normalize_mate(mate_raw)
+
+            # Dynamic Blending of Evaluations
+            if cp_eval > 1:  # Aggressive weighting in strong positions
+                weight_eval += 0.2
+                weight_prob -= 0.2  # Reduce reliance on probability
+
+            if mate_eval == 0:
+                mate_weight = 0.0
+                cp_weight = 1.0 if cp_eval > 0 else 0.8
             else:
-                # Use cp_score otherwise
-                eval_score = cp_score
-                prob_weight = weight_prob
-                eval_weight = weight_eval
+                mate_weight = 0.8 if cp_eval > 1 else 0.6
+                cp_weight = 0.4 if cp_eval > 1 else 0.4
+
+            blended_eval = mate_weight * mate_eval + cp_weight * cp_eval
 
             # Weighted score calculation
-            weighted_score = prob_weight * move_pred[0][idx] + eval_weight * eval_score
+            scaled_blended_eval = max(blended_eval, -0.5)
+            adjusted_probability = move_pred[0][idx] ** 0.75
+            weighted_score = weight_prob * adjusted_probability + weight_eval * scaled_blended_eval
 
-            # Avoid negative scores (optional adjustment)
+            # Reduce penalties in strong positions
+            if cp_eval > 2:
+                repetition_penalty *= 0.5
+                cycle_penalty *= 0.5
+
+            # Apply penalties for repetitions and cycles
+            if predicted_move in repetitions:
+                penalty_factor = 1 + repetitions[predicted_move]
+                weighted_score -= repetition_penalty * penalty_factor
+
+            for cycle, count in cycles.items():
+                if predicted_move in cycle:
+                    weighted_score -= cycle_penalty * count
+
+            # Avoid negative scores
             weighted_score = max(weighted_score, 0)
 
+            # Append to top_moves with both raw and normalized values
             top_moves.append({
                 "move": predicted_move,
-                "probability": move_pred[0][idx],
-                "cp_eval": cp_eval,
-                "mate_eval": mate_eval,
-                "weighted_score": weighted_score,
+                "probability": move_pred[0][idx],      # Raw probability
+                "cp_eval_raw": cp_raw,                # Raw CP value
+                "cp_eval_normalized": cp_eval,        # Normalized CP value
+                "mate_eval_raw": mate_raw,            # Raw mate value
+                "mate_eval_normalized": mate_eval,    # Normalized mate value
+                "blended_eval": blended_eval,         # Blended evaluation score
+                "weighted_score": weighted_score,     # Final weighted score
             })
 
             if len(top_moves) == top_n:
@@ -374,6 +586,7 @@ def predict_middle_move_weighted(fen, moves, model, move_to_idx, idx_to_move, ma
 
     # Sort the top moves by weighted score
     top_moves = sorted(top_moves, key=lambda x: x["weighted_score"], reverse=True)
+    print("Top moves:", top_moves[:5])
 
     # Return the best move and all top moves
     best_move = top_moves[0]["move"] if top_moves else None
@@ -447,7 +660,7 @@ def predict_next_move(CHECKPOINT_DIR, assessment_type, fen, move_history):
 
     if assessment_type == "weighted":
         middle_game_moves = move_history[10:]
-        best_move, top_moves = predict_middle_move_weighted(fen, middle_game_moves, middle_model, middle_move_to_idx, middle_idx_to_move)
+        best_move, top_moves = predict_middle_move_weighted_priority(fen, middle_game_moves, middle_model, middle_move_to_idx, middle_idx_to_move)
     elif assessment_type == "depth":
         depth = 2
         alpha = -float("inf")

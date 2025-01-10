@@ -152,7 +152,7 @@ def main(CHECKPOINT_DIR_OPENING, CHECKPOINT_DIR_MIDDLE, MODEL_PATH, MOVE_TO_ID_P
 if __name__ == "__main__":
     CHECKPOINT_DIR_OPENING = "../../v5/models/checkpoints"
     CHECKPOINT_DIR_MIDDLE = "../models/checkpoints3"
-    MODEL_PATH = "../../v1/models/base_transformer_50k_games_Models/onnx_models/model_elo_2000_plus.onnx"
+    MODEL_PATH = "../../v1/models/base_transformer_50k_games_Models/onnx_models/model_elo_0_999.onnx"
     MOVE_TO_ID_PATH = "../../v1/models/base_transformer_50k_games_Models/move_to_id.json"
     ID_TO_MOVE_PATH = "../../v1/models/base_transformer_50k_games_Models/id_to_move.json"
 
