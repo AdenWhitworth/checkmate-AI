@@ -80,7 +80,7 @@ def save_quantized_model(input_model_path: str, output_model_path: str) -> None:
     quantize_dynamic(
         model_input=input_model_path,
         model_output=output_model_path,
-        weight_type=QuantType.QInt8,  # Quantize weights to INT8
+        weight_type=QuantType.QInt8,
     )
     print(f"Quantized model saved at: {output_model_path}")
 
@@ -94,23 +94,19 @@ def optimize_and_quantize(model_path: str, output_dir: str) -> None:
     """
     ensure_directory_exists(output_dir)
 
-    # Validate the ONNX model
     model = validate_onnx_model(model_path)
 
-    # Save the optimized model
     optimized_model_path = os.path.join(output_dir, "optimized_model.onnx")
     save_optimized_model(model, optimized_model_path)
 
-    # Save the quantized model
     quantized_model_path = os.path.join(output_dir, "optimized_model_quantized.onnx")
     save_quantized_model(optimized_model_path, quantized_model_path)
 
     print("Model optimization and quantization completed successfully.")
 
 if __name__ == "__main__":
-    # Define paths
-    input_model_path = "model_elo_2000_plus.onnx"  # Replace with your model file path
-    output_directory = "optimized_output_models"  # Directory to save outputs
+    input_model_path = "../Transformers/v5/models/checkpoints/onnx_model/model_final_with_outcome.onnx"
+    output_directory = "../Transformers/v5/models/checkpoints/onnx_model"
 
     try:
         optimize_and_quantize(input_model_path, output_directory)
