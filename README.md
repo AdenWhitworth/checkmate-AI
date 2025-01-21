@@ -26,11 +26,13 @@ Welcome to **Checkmate AI**, the machine learning-powered chess engine driving t
 
 ## Overview
 
-**Checkmate** is a real-time chess platform where players can compete against live opponents, chat in-game, track their rankings, and practice with human-like AI bots. The AI bot is built using TensorFlow in Python, processing games to train and test models. The trained models are exported in ONNX format for seamless integration into the Checkmate backend.
+**Checkmate** is a real-time chess platform where players can compete against live opponents, chat in-game, track their rankings, complete interactive puzzles, and practice with human-like AI bots. The AI bot is built using TensorFlow in Python, processing games to train and test models. The trained models are exported in ONNX format for seamless integration into the Checkmate backend.
 
 ## Checkmate Demo
 
-The Checkmate application is live and can be accessed here: [Checkmate Demo](https://checkmateplay.com). Explore all features, including human vs. human gameplay, human vs. bot gameplay, in-game chat, and player rankings.
+The Checkmate application is live and can be accessed here: [Checkmate Demo](https://checkmateplay.com). You can explore all features of the game, including real-time gameplay, puzzles, chat, and rankings.
+
+<img width="600" src="https://github.com/AdenWhitworth/aden_whitworth_portfolio/raw/master/src/Images/chess_demo.png" alt="Checkmate Demo">
 
 ### Test User Credentials
 
@@ -60,6 +62,7 @@ Try out the app using the following demo accounts:
 - **Python**: The primary programming language for the project, powering all data processing, model training, and backend integration.
 - **Scikit-learn (SKLearn)**: A machine learning library for preprocessing data, evaluating models, and implementing supplementary algorithms like scaling and validation.
 - **TensorFlow**: An end-to-end machine learning framework used for building, training, and fine-tuning AI models, including transformers and neural networks.
+- **Linchess Database**: Open-source database containing millions of chess games, used to train the bots chess gameplay at varying skill levels.
 
 ## Getting Started
 
@@ -150,6 +153,7 @@ A base model was trained using data from all ELO ranges, created with a transfor
         - 50k games dataset.
 - **Performance**:
     - The base model trained on the 50k games dataset achieved:
+
     | Dataset         | Loss   | Accuracy |
     |-----------------|--------|----------|
     | **Base Model**  | 0.5491 | 89.10%   |
@@ -166,12 +170,17 @@ To simulate skill-specific gameplay, the base transformer model was fine-tuned f
     - The previously trained base model was loaded and fine-tuned for 5 epochs using 15k games from each ELO range.
 - **Performance**:
     - The fine-tuned models achieved the following results:
+
     | ELO Range      | Loss   | Accuracy |
     |----------------|--------|----------|
     | **<1000**      | 0.4100 | 91.81%   |
     | **1000–1500**  | 0.4782 | 90.36%   |
     | **1500–2000**  | 0.5559 | 88.88%   |
     | **>2000**      | 0.6249 | 87.61%   |
+
+<img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/TFMR_ELOS_LOSS.png" alt="Transformer Loss Chart">
+<img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/TFMR_ELOS_ACCURACY.png" alt="Transformer Accuracy Chart">
+
 - **Training Time**:
     - Training all models (base and fine-tuned) took approximately 24–48 hours on local hardware, depending on the CPU/GPU setup.
 
@@ -204,13 +213,18 @@ A DNN model was implemented as the initial approach to understand how basic neur
     - Models were trained independently for each ELO range.
 - **Results**:
     - Despite training, the model struggled to generalize the rules of chess:
+
     | ELO Range      | Loss   | Accuracy |
     |----------------|--------|----------|
     | **<1000**      | 5.9137 | 9.77%    |
     | **1000–1500**  | 5.7089 | 9.99%    |
     | **1500–2000**  | 5.7176 | 9.41%    |
     | **>2000**      | 5.7024 | 8.83%    |
--** Key Insights**:
+
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/DNN_ELOS_LOSS.png" alt="DNN Loss Chart">
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/DNN_ELOS_ACCURACY.png" alt="DNN Loss Chart">
+  
+- **Key Insights**:
     - The DNN memorized moves but lacked the situational awareness required to play chess effectively.
     - It struggled to learn the rules of chess, even with scaled datasets.
     - The low accuracy highlighted the need for a model architecture that could better understand positional and sequential aspects of the game.
@@ -219,7 +233,7 @@ A DNN model was implemented as the initial approach to understand how basic neur
 
 To improve the bot's awareness of chess-specific attributes, a Convolutional Neural Network (CNN) was implemented. Unlike the DNN, the CNN incorporates both the board's spatial representation and additional game-specific features, such as castling rights and move clocks, to make better-informed predictions.
 
-- ** Key Improvements**:
+- **Key Improvements**:
     - Added game-specific features to the dataset:
         - Turn (white or black).
         - Castling rights (king- and queen-side for each player).
@@ -251,12 +265,16 @@ To improve the bot's awareness of chess-specific attributes, a Convolutional Neu
             - A final softmax layer predicted the best move out of 4096 possible moves.
 - **Training and Results**:
     - The CNN was trained independently for each ELO range using 5k games per range, for 30 epochs. Early stopping was used to prevent overfitting.
+  
     | ELO Range      | Loss   | Accuracy |
     |----------------|--------|----------|
     | **<1000**      | 5.0660 | 10.77%   |
     | **1000–1500**  | 5.0810 | 10.46%   |
     | **1500–2000**  | 5.1264 | 10.24%   |
     | **>2000**      | 5.1905 | 9.66%    |
+
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/CNN_ELOS_LOSS.png" alt="CNN Loss Chart">
+  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/CNN_ELOS_ACCURACY.png" alt="CNN Loss Chart">
 
 - **Insights and Limitations**:
     - The CNN demonstrated a slight improvement over the DNN, with better accuracy across all ELO ranges.
@@ -301,9 +319,11 @@ Building on previous experiments, this model introduces a unified approach that 
             - A final softmax layer predicts the best move out of 4096 possibilities.
 - **Training and Results**:
     - The base model was trained for 30 epochs on 15k games from players with ELOs of 1500 and above. Early stopping and learning rate reduction were used to improve training stability.
+      
     | Dataset         | Loss   | Accuracy |
     |-----------------|--------|----------|
     | **Base Model**  | 5.2731 | 8.95%    |
+  
 - **Insights and Limitations**:
     - Challenges with ELO Features:
         - Including player ELO in the feature vector did not improve performance. Instead, it introduced unnecessary complexity, hindering the model’s ability to learn chess rules effectively.
@@ -348,9 +368,11 @@ After observing that adding more games and features led to poorer performance, t
             - The model’s output was restricted to legal moves using a softmax layer applied over the masked logits.
 - **Training and Results**:
     - The model was trained for 30 epochs on 15k games from advanced and master players.
+      
     | Dataset         | Loss   | Accuracy |
     |-----------------|--------|----------|
     | **Base Model**  | 7.9835 | 3.47%    |
+  
 - **Insights and Limitations**:
     - Improvements:
         - By focusing only on legal moves, the model avoided nonsensical predictions, ensuring all outputs adhered to chess rules.
@@ -403,7 +425,7 @@ Key observations and insights from the fine-tuned transformer models across diff
     - Advanced and master bots occasionally miss optimal moves, preventing them from fully reaching a 2000+ ELO standard.
     - The current approach trains models to predict the next best move based on game outcomes, but it fails to account for individual move quality.
     - Proposed Solution: Extend PGN labeling to include evaluations of individual moves, helping the model understand which moves contribute positively or negatively to game outcomes.
-4. ** Complexity of Chess Modeling**:
+4. **Complexity of Chess Modeling**:
     - Chess requires a nuanced understanding of rules, strategy, and foresight. A model that only memorizes moves fails to capture the depth of the game.
     - The best-performing chess models likely require a hybrid approach of supervised and unsupervised learning to address all key aspects of chess:
         - Legal move generation (rules).
@@ -419,6 +441,7 @@ Here are some exciting features planned for future development:
 1. **Expanded Training Dataset**: Increase the training size to over 100k games for each fine-tuned model, enabling more human-like gameplay and improved generalization across ELO ranges.
 2. **Reinforcement Learning**: Further refine the master-level bot by incorporating reinforcement learning techniques, enabling it to learn advanced strategies and adapt dynamically to different playstyles.
 3. **Enhanced Chess Move Evaluation**: Integrate a chess evaluator to assess and rate moves in PGN games. Include these evaluations in the transformer tensor to help the model distinguish between good and bad moves, particularly for high-level ELO play.
+4. **Integrated Chess Phases**: Adapt the playstyle to react to the different stages of the game. Evaluate and split PGN games into the three main phases of chess: opening, middlegame, and endgame. Use this data to help the model determine the best strategy for each phase of the game.
 
 ## Contributing
 
