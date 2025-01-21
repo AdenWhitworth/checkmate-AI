@@ -86,6 +86,7 @@ Ensure the following are installed:
 - **Conda** (24.11.1 or higher)
 - **Lichess Standard Chess Games** (minimum 1 million games)
 - **Lichess Evaluations Database**
+- **Lichess Openings Dataset**
 - **Git** (command-line tool for cloning repositories)
 
 ### Hardware
@@ -171,6 +172,9 @@ Save Stockfish chessboard evaluations (174 million positions) in JSON format fro
 3. **Download Stockfish Binary**:
 Install the Stockfish binary for your operating system from [Stockfish 17](https://stockfishchess.org/download/). Ensure the binary is added to your system’s PATH for use in preprocessing.
 
+4. **Download Opening Book**:
+Obtain the comprehensive database of known chess opening moves from the [Lichess Chess Openings](https://www.kaggle.com/datasets/lichess/chess-openings).
+
 ## Chess Bot Creation
 
 Discover the step-by-step process behind the development of the Checkmate AI bot, from data preparation to advanced model architectures.
@@ -209,6 +213,155 @@ The bot's design evolved through iterative improvements, starting with simple mo
 - Used grandmaster moves as targets and incorporated centipawn and mate evaluations for middle-game scenarios. (Version 6)
 
 #### Current Model
+
+##### **Overview**:
+The current implementation consists of two specialized transformer models: the Opening Phase Transformer and the Midgame Phase Transformer, each designed to address specific challenges and requirements for their respective game phases. For the endgame phase, the Lichess 7 piece table base is used. 
+
+##### **Steps to Reproduce**:
+
+To replicate the training and evaluation of the current models, follow these steps:
+
+1. Setup Environment:
+  - Ensure all prerequresits and downloads from the getting started section are available and working. 
+2. Preprocess Data:
+  - Convert the zst PGN games to PGN file
+
+
+##### **Opening Phase Transformer**:
+
+The Opening Phase Transformer focused on the initial stage of chess games, leveraging annotated opening book data and game outcomes to specialize in early-game strategies. This phase-specific model trained on openings provided a clearer focus on common patterns in chess openings.
+
+- **Key Features**:
+  - **Opening Phase Data Preparation**:
+      - Processes games with FEN positions, UCI move sequences, and game outcomes annotated with ECO codes and opening names.
+      - Labels moves with a predefined opening book to provide phase-specific context.
+  - **Game Outcome Integration**:
+      - Includes game outcomes (-1 for loss, 0 for draw, 1 for win) to train the model to predict positional strength in addition to next moves.
+  - **Dual Outputs**:
+      - Simultaneously predicts the next move in the opening sequence and the overall game outcome.
+  - **Transformer Model Design**:
+      - Combines FEN encoding and move sequence embeddings with a Transformer-based architecture for contextual predictions.
+  - **Preprocessing Pipeline**:
+      - Converts FEN strings into numeric tensors representing the board state.
+      - Encodes UCI moves into sequences of token indices with a custom move-to-index mapping.
+      - Pads sequences for uniform input lengths.
+
+- **Data Preparation**:
+  - **FEN Encoding**:
+      - Converts chessboard states into tensors with numeric representations for pieces, turn, castling rights, and en passant information.
+  - **Move Tokenization**:
+      - Encodes UCI moves using a move-to-index map, with padding for sequences shorter than the maximum length.
+  - **Outcome Labeling**:
+      - Maps game outcomes into discrete classes: Loss (0), Draw (1), and Win (2).
+  - **Dataset Splitting**:
+      - Splits data into 80% training and 20% validation sets for model evaluation.
+
+- **Model Architecture**:
+  - **Inputs**:
+      - **FEN Input**: Encodes the current board state.
+      - **Move Sequence Input**: Encodes the sequence of prior moves.
+  - **Embedding and Attention Layers**:
+      - Embeds FEN and move sequences into dense vectors.
+      - Uses multi-head attention to capture positional and sequential dependencies.
+  - **Outputs**:
+      - **Next Move Prediction**: Outputs a probability distribution over all legal moves.
+      - **Game Outcome Prediction**: Outputs probabilities for game outcomes (win, draw, loss).
+  - **Loss and Metrics**:
+      - Tracks total loss, next move cross-entropy loss, and outcome classification loss.
+      - Measures accuracy for next move predictions and game outcomes.
+
+- **Training and Results**:
+  - The model was trained for 50 epochs with early stopping and learning rate scheduling.
+  - Achieved the following results:
+
+    | Metric                    | Training Value | Validation Value |
+    |---------------------------|----------------|------------------|
+    | **Loss**                  | 2.5458         | 2.5144           |
+    | **Next Move Loss**        | 1.6852         | 1.6496           |
+    | **Outcome Loss**          | 0.8606         | 0.8648           |
+    | **Next Move Accuracy**    | 46.22%         | 46.98%           |
+    | **Outcome Accuracy**      | 50.14%         | 49.36%           |
+
+- **Insights and Limitations**:
+  - **Improvements**:
+      - **Opening Phase Context**: Restricting the data to the opening phase allowed the model to focus on specific patterns and strategies common in early-game positions.
+      - **Dual-Output Learning**: Simultaneous training for move and outcome predictions enhanced the model's understanding of positional evaluations.
+      - **Efficient Data Handling**: The preprocessing pipeline effectively managed large datasets with uniform labeling and padding.
+  - **Challenges**:
+      - **Game Outcome Prediction**: While moderately accurate, the model's performance on outcome prediction could be improved by incorporating more advanced evaluation features (e.g., Stockfish CP/mate evaluations).
+      - **Limited Scope**: Focusing only on the opening phase may limit generalizability to middle and endgame scenarios.
+  - **Key Takeaways**:
+      - Phase-specific models like this opening-focused one can significantly improve prediction accuracy for specific portions of the game.
+      - Future work could extend the approach to middle and endgame phases, ensuring each phase benefits from tailored training data and objectives.
+      - Incorporating legal move evaluations and Stockfish analysis could further refine predictions and improve model performance in real-game scenarios.
+
+##### **Midgame Phase Transformer**:
+
+The Midgame Phase Transformer specialized in predicting moves and evaluations during the midgame, where strategic complexity increases. By incorporating legal moves and evaluations for every board state, this model emphasized contextual understanding of the game.
+
+- **Key Features**:
+  - **Enhanced FEN Encoding**:
+      - Converts FEN strings into spatial tensors, representing board state and game context with turn information.
+  - **Legal Move Integration**:
+      - Incorporates all legal moves from the given board state, with centipawn (CP) and mate evaluations for each move.
+  - **Move History and Predictions**:
+      - Processes sequences of moves up to the current position to predict the next move.
+  - **Multi-Output Model**:
+      - Simultaneously predicts:
+          - The next move (classification).
+          - CP evaluations for all legal moves (regression).
+          - Mate evaluations for all legal moves (regression).
+  - **Transformer-Based Architecture**:
+      - Combines convolutional neural networks (CNNs) for spatial representation and attention mechanisms for sequential move analysis.
+
+- **Data Preparation**:
+  - **FEN to Tensor**:
+      - Encodes FEN into an 8x8x13 tensor, capturing piece locations, turn, and castling rights.
+  - **Move Encoding**:
+      - Maps UCI moves to indices using a custom move-to-index dictionary.
+  - **Legal Move Evaluations**:
+      - Normalizes CP evaluations to a [-1, 1] range and retains mate evaluations as-is.
+  - **Dataset Splitting**:
+      - Splits data into 80% training and 20% validation sets.
+
+- **Model Architecture**:
+  - **Inputs**:
+      - **FEN Input**: Encodes the current board state as a spatial tensor.
+      - **Move Sequence Input**: Encodes prior moves leading to the current position.
+  - **Embeddings**:
+      - CNN extracts spatial features from FEN input.
+      - Move sequences are embedded and processed using attention mechanisms.
+  - **Outputs**:
+      - **Next Move Prediction**: Softmax output over all possible moves.
+      - **CP Evaluation Prediction**: Linear output for normalized centipawn scores.
+      - **Mate Evaluation Prediction**: Linear output for mate evaluations.
+  - **Loss and Metrics**:
+      - Tracks loss and accuracy for next move prediction.
+      - Measures mean absolute error (MAE) for CP and mate evaluations.
+
+- **Training and Results**:
+  - The model was trained across three checkpoints with increasing dataset sizes.
+
+    | Checkpoint | Loss   | Next Move Loss | CP Loss | Mate Loss | Next Move Accuracy | Top-k Accuracy | CP MAE  | Mate MAE |
+    |------------|--------|----------------|---------|-----------|--------------------|----------------|---------|----------|
+    | **1 (700 games)**  | 4.8450 | 4.8378 | 0.0032  | 4.06e-05  | 11.42%            | 27.13%         | 0.0101  | 0.0015   |
+    | **2 (2200 games)** | 4.2049 | 4.1999 | 0.0031  | 1.51e-05  | 15.94%            | 37.13%         | 0.0095  | 0.0005   |
+    | **3 (3200 games)** | 4.1148 | 4.1104 | 0.0030  | 8.99e-06  | 15.83%            | 38.17%         | 0.0091  | 0.0004   |
+
+- **Insights and Limitations**:
+  - **Improvements**:
+      - **Enhanced Context Understanding**: Combining FEN, legal moves, and evaluations improved the model's contextual predictions.
+      - **Multi-Task Learning**: Simultaneous training on move prediction and evaluations led to better performance across all tasks.
+      - **Scalable Training**: Incremental dataset increases significantly improved next move accuracy and top-k accuracy.
+  - **Challenges**:
+      - **Low Top-1 Accuracy**: Predicting the exact next move remains challenging due to the large move space and complex positional evaluations.
+      - **Evaluation Noise**: Variability in CP and mate evaluations across different scenarios may introduce noise in predictions.
+- **Key Takeaways**:
+    - **Multi-Task Learning Potential**: The midgame model highlights the effectiveness of multi-task learning for chess prediction tasks. By incorporating legal moves and evaluations, the model improves contextual understanding, making it better suited for complex midgame scenarios.
+    - **Dataset Size Impact**: The accuracy and top-k performance of the model improved significantly as the number of preprocessed games increased. However, only 3,200 games were used due to the high preprocessing overhead (~10 hours per 1,000 games). Future work could explore processing larger datasets (e.g., 10,000 games) to evaluate the impact of dataset size on accuracy and convergence.
+
+
+
 
 
 
@@ -252,9 +405,6 @@ The Deep Neural Network (DNN) was implemented as an initial exploration to under
   | **1000–1500**  | 5.7089 | 9.99%    |
   | **1500–2000**  | 5.7176 | 9.41%    |
   | **>2000**      | 5.7024 | 8.83%    |
-
-  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/DNN_ELOS_LOSS.png" alt="DNN Loss Chart">
-  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/DNN_ELOS_ACCURACY.png" alt="DNN Accuracy Chart">
 
 - **Key Insights**:
   - The DNN memorized moves but lacked situational awareness, making it unable to adapt to chess rules or strategies.
@@ -308,9 +458,6 @@ To improve the bot's understanding of chess-specific attributes, a Convolutional
   | **1000–1500**  | 5.0810 | 10.46%   |
   | **1500–2000**  | 5.1264 | 10.24%   |
   | **>2000**      | 5.1905 | 9.66%    |
-
-  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/CNN_ELOS_LOSS.png" alt="CNN Loss Chart">
-  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/CNN_ELOS_ACCURACY.png" alt="CNN Accuracy Chart">
 
 - **Insights and Limitations**:
   - **Improvements**:
@@ -513,9 +660,6 @@ Building on the base transformer model, fine-tuning was performed to adapt the m
   | **1000–1500**  | 0.4782 | 90.36%   |
   | **1500–2000**  | 0.5559 | 88.88%   |
   | **>2000**      | 0.6249 | 87.61%   |
-
-  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/TFMR_ELOS_LOSS.png" alt="Transformer Loss Chart">
-  <img width="600" src="https://github.com/AdenWhitworth/checkmate-AI/raw/main/Visuals/elo_ranges_accuracy_loss_plots/TFMR_ELOS_ACCURACY.png" alt="Transformer Accuracy Chart">
 
 - **Insights and Limitations**:
   - **Improvements**:
@@ -721,139 +865,6 @@ The Policy and Value Transformer introduced a dual-output architecture to simult
       - **Legal Move Evaluations**: Incorporating legal moves and their evaluations (e.g., centipawn/mate scores for all possible actions) would provide the model with richer tactical and positional context.
       - **Improved Value Handling**: Separating centipawn evaluations and mate scores into distinct outputs would allow the model to better differentiate between material imbalances and forced mate scenarios.
 
-##### 10. **Opening Phase Transformer**:
-
-The Opening Phase Transformer focused on the initial stage of chess games, leveraging annotated opening book data and game outcomes to specialize in early-game strategies. This phase-specific model trained on openings provided a clearer focus on common patterns in chess openings.
-
-- **Key Features**:
-  - **Opening Phase Data Preparation**:
-      - Processes games with FEN positions, UCI move sequences, and game outcomes annotated with ECO codes and opening names.
-      - Labels moves with a predefined opening book to provide phase-specific context.
-  - **Game Outcome Integration**:
-      - Includes game outcomes (-1 for loss, 0 for draw, 1 for win) to train the model to predict positional strength in addition to next moves.
-  - **Dual Outputs**:
-      - Simultaneously predicts the next move in the opening sequence and the overall game outcome.
-  - **Transformer Model Design**:
-      - Combines FEN encoding and move sequence embeddings with a Transformer-based architecture for contextual predictions.
-  - **Preprocessing Pipeline**:
-      - Converts FEN strings into numeric tensors representing the board state.
-      - Encodes UCI moves into sequences of token indices with a custom move-to-index mapping.
-      - Pads sequences for uniform input lengths.
-
-- **Data Preparation**:
-  - **FEN Encoding**:
-      - Converts chessboard states into tensors with numeric representations for pieces, turn, castling rights, and en passant information.
-  - **Move Tokenization**:
-      - Encodes UCI moves using a move-to-index map, with padding for sequences shorter than the maximum length.
-  - **Outcome Labeling**:
-      - Maps game outcomes into discrete classes: Loss (0), Draw (1), and Win (2).
-  - **Dataset Splitting**:
-      - Splits data into 80% training and 20% validation sets for model evaluation.
-
-- **Model Architecture**:
-  - **Inputs**:
-      - **FEN Input**: Encodes the current board state.
-      - **Move Sequence Input**: Encodes the sequence of prior moves.
-  - **Embedding and Attention Layers**:
-      - Embeds FEN and move sequences into dense vectors.
-      - Uses multi-head attention to capture positional and sequential dependencies.
-  - **Outputs**:
-      - **Next Move Prediction**: Outputs a probability distribution over all legal moves.
-      - **Game Outcome Prediction**: Outputs probabilities for game outcomes (win, draw, loss).
-  - **Loss and Metrics**:
-      - Tracks total loss, next move cross-entropy loss, and outcome classification loss.
-      - Measures accuracy for next move predictions and game outcomes.
-
-- **Training and Results**:
-  - The model was trained for 50 epochs with early stopping and learning rate scheduling.
-  - Achieved the following results:
-
-    | Metric                    | Training Value | Validation Value |
-    |---------------------------|----------------|------------------|
-    | **Loss**                  | 2.5458         | 2.5144           |
-    | **Next Move Loss**        | 1.6852         | 1.6496           |
-    | **Outcome Loss**          | 0.8606         | 0.8648           |
-    | **Next Move Accuracy**    | 46.22%         | 46.98%           |
-    | **Outcome Accuracy**      | 50.14%         | 49.36%           |
-
-- **Insights and Limitations**:
-  - **Improvements**:
-      - **Opening Phase Context**: Restricting the data to the opening phase allowed the model to focus on specific patterns and strategies common in early-game positions.
-      - **Dual-Output Learning**: Simultaneous training for move and outcome predictions enhanced the model's understanding of positional evaluations.
-      - **Efficient Data Handling**: The preprocessing pipeline effectively managed large datasets with uniform labeling and padding.
-  - **Challenges**:
-      - **Game Outcome Prediction**: While moderately accurate, the model's performance on outcome prediction could be improved by incorporating more advanced evaluation features (e.g., Stockfish CP/mate evaluations).
-      - **Limited Scope**: Focusing only on the opening phase may limit generalizability to middle and endgame scenarios.
-  - **Key Takeaways**:
-      - Phase-specific models like this opening-focused one can significantly improve prediction accuracy for specific portions of the game.
-      - Future work could extend the approach to middle and endgame phases, ensuring each phase benefits from tailored training data and objectives.
-      - Incorporating legal move evaluations and Stockfish analysis could further refine predictions and improve model performance in real-game scenarios.
-
-##### 11. **Midgame Phase Transformer**:
-
-The Midgame Phase Transformer specialized in predicting moves and evaluations during the midgame, where strategic complexity increases. By incorporating legal moves and evaluations for every board state, this model emphasized contextual understanding of the game.
-
-- **Key Features**:
-  - **Enhanced FEN Encoding**:
-      - Converts FEN strings into spatial tensors, representing board state and game context with turn information.
-  - **Legal Move Integration**:
-      - Incorporates all legal moves from the given board state, with centipawn (CP) and mate evaluations for each move.
-  - **Move History and Predictions**:
-      - Processes sequences of moves up to the current position to predict the next move.
-  - **Multi-Output Model**:
-      - Simultaneously predicts:
-          - The next move (classification).
-          - CP evaluations for all legal moves (regression).
-          - Mate evaluations for all legal moves (regression).
-  - **Transformer-Based Architecture**:
-      - Combines convolutional neural networks (CNNs) for spatial representation and attention mechanisms for sequential move analysis.
-
-- **Data Preparation**:
-  - **FEN to Tensor**:
-      - Encodes FEN into an 8x8x13 tensor, capturing piece locations, turn, and castling rights.
-  - **Move Encoding**:
-      - Maps UCI moves to indices using a custom move-to-index dictionary.
-  - **Legal Move Evaluations**:
-      - Normalizes CP evaluations to a [-1, 1] range and retains mate evaluations as-is.
-  - **Dataset Splitting**:
-      - Splits data into 80% training and 20% validation sets.
-
-- **Model Architecture**:
-  - **Inputs**:
-      - **FEN Input**: Encodes the current board state as a spatial tensor.
-      - **Move Sequence Input**: Encodes prior moves leading to the current position.
-  - **Embeddings**:
-      - CNN extracts spatial features from FEN input.
-      - Move sequences are embedded and processed using attention mechanisms.
-  - **Outputs**:
-      - **Next Move Prediction**: Softmax output over all possible moves.
-      - **CP Evaluation Prediction**: Linear output for normalized centipawn scores.
-      - **Mate Evaluation Prediction**: Linear output for mate evaluations.
-  - **Loss and Metrics**:
-      - Tracks loss and accuracy for next move prediction.
-      - Measures mean absolute error (MAE) for CP and mate evaluations.
-
-- **Training and Results**:
-  - The model was trained across three checkpoints with increasing dataset sizes.
-
-    | Checkpoint | Loss   | Next Move Loss | CP Loss | Mate Loss | Next Move Accuracy | Top-k Accuracy | CP MAE  | Mate MAE |
-    |------------|--------|----------------|---------|-----------|--------------------|----------------|---------|----------|
-    | **1 (700 games)**  | 4.8450 | 4.8378 | 0.0032  | 4.06e-05  | 11.42%            | 27.13%         | 0.0101  | 0.0015   |
-    | **2 (2200 games)** | 4.2049 | 4.1999 | 0.0031  | 1.51e-05  | 15.94%            | 37.13%         | 0.0095  | 0.0005   |
-    | **3 (3200 games)** | 4.1148 | 4.1104 | 0.0030  | 8.99e-06  | 15.83%            | 38.17%         | 0.0091  | 0.0004   |
-
-- **Insights and Limitations**:
-  - **Improvements**:
-      - **Enhanced Context Understanding**: Combining FEN, legal moves, and evaluations improved the model's contextual predictions.
-      - **Multi-Task Learning**: Simultaneous training on move prediction and evaluations led to better performance across all tasks.
-      - **Scalable Training**: Incremental dataset increases significantly improved next move accuracy and top-k accuracy.
-  - **Challenges**:
-      - **Low Top-1 Accuracy**: Predicting the exact next move remains challenging due to the large move space and complex positional evaluations.
-      - **Evaluation Noise**: Variability in CP and mate evaluations across different scenarios may introduce noise in predictions.
-- **Key Takeaways**:
-    - **Multi-Task Learning Potential**: The midgame model highlights the effectiveness of multi-task learning for chess prediction tasks. By incorporating legal moves and evaluations, the model improves contextual understanding, making it better suited for complex midgame scenarios.
-    - **Dataset Size Impact**: The accuracy and top-k performance of the model improved significantly as the number of preprocessed games increased. However, only 3,200 games were used due to the high preprocessing overhead (~10 hours per 1,000 games). Future work could explore processing larger datasets (e.g., 10,000 games) to evaluate the impact of dataset size on accuracy and convergence.
-
 ### Performance Summary
 
 See the performance metrics of each model, highlighting their accuracy and loss across different datasets and training configurations.
@@ -887,41 +898,66 @@ Loss and accuracy are metrics used to evaluate the performance of machine learni
 |                                |                 |                   |          | 10.81% (Top-3) |
 | **Opening Phase Transformer**  | All             | 15k              | 2.5144   | 46.98%        |
 | **Midgame Phase Transformer**  | All             | 3.2k             | 4.1148   | 15.83%        |
-|                                |                 |                   |          | 38.17% (Top-3)|
+|                                |                 |                   |          | 38.17% (Top-5)|
 
 
 ### Challenges & Learnings
 
-Key observations and insights from the fine-tuned transformer models across different ELO ranges:
+The multi-phase transformer model has undergone significant development, revealing key challenges and areas for improvement:
 
-1. **Novice and Intermediate Bots**:
-    - These bots effectively simulate their ELO range, demonstrating a solid understanding of legal moves and basic chess strategy.
-    - Blunders and missed opportunities occur at an acceptable rate, making their playstyle feel realistic for their skill level.
-2. **Advanced and Master Bots**:
-    - While these bots perform well in identifying strong moves, they lack foresight for multi-turn strategies.
-    - Their inability to adhere to specific chess openings can detract from their perceived ELO accuracy.
-    - By integrating an alpha-beta pruning depth search during inference, the bots better evaluate moves with future consequences.
-3. **ELO Consistency Issues**:
-    - Advanced and master bots occasionally miss optimal moves, preventing them from fully reaching a 2000+ ELO standard.
-    - The current approach trains models to predict the next best move based on game outcomes, but it fails to account for individual move quality.
-    - Proposed Solution: Extend PGN labeling to include evaluations of individual moves, helping the model understand which moves contribute positively or negatively to game outcomes.
-4. **Complexity of Chess Modeling**:
-    - Chess requires a nuanced understanding of rules, strategy, and foresight. A model that only memorizes moves fails to capture the depth of the game.
-    - The best-performing chess models likely require a hybrid approach of supervised and unsupervised learning to address all key aspects of chess:
-        - Legal move generation (rules).
-        - Positional understanding and strategy (supervised learning).
-        - Long-term planning and foresight (unsupervised or reinforcement learning).
+1. ELO Performance Evaluation
+  - V1 Model:
+    - When tested against Stockfish's lowest level (1350 ELO), the V1 model demonstrated beginner-level play (~800 ELO) as per post-game Stockfish analysis.
+  - V5/V6 Model:
+    - Games against Stockfish's lowest level were far more competitive, showcasing intermediate-level play (~1200 ELO).
+  - Direct Comparison:
+    - Simulating a match between V1 and V5/V6 confirmed these ELO estimates. The V5/V6 model consistently outperformed V1, making fewer blunders and exhibiting more strategic gameplay.
+2. Challenges in Achieving Advanced and Master-Level Play
+  - Data Limitations:
+    - The V5/V6 model was trained on only 3,200 annotated grandmaster games due to preprocessing constraints. Consequently, the model predicted the true grandmaster move within its top 5 suggestions only 38% of the time, leading to intermediate-level play (~1200 ELO).
+  - Mid-to-Endgame Transition:
+    - Post-game analysis highlighted poor performance during the transition from midgame to endgame. This can be attributed to the limited dataset and the increasing complexity of possible moves in these phases.
+  - Proposed Solution:
+    - Expanding the dataset with more preprocessed grandmaster games is critical. Increasing the training data size could enhance the model's strategic understanding, potentially improving its ELO to the advanced (~1750) range.
+3. Late-Game Puzzle Integration
+  - Targeting Weak Points:
+    - The mid-to-endgame transition remains the model's weakest phase. Integrating Lichess puzzles specifically designed for late-game scenarios could significantly improve performance.
+  - Proposed Strategy:
+    - Train a separate model exclusively on puzzles and use it to fine-tune the V5/V6 transformer. This would enhance strategic depth without losing the strengths of the base model, potentially achieving master-level play (~2250 ELO).
+4. Exploring Unsupervised Learning
+  - Supervised Learning Limits:
+    - As more data is added, the transformer model may approach the upper limits of what supervised learning can achieve.
+  - Next Steps:
+    - Leverage the knowledge from the supervised model to train a fine-tuned unsupervised model.
+    - Use reinforcement learning techniques to reward or penalize moves based on game outcomes, enabling the model to improve by playing against itself or Stockfish.
 
-This iterative process of model development and evaluation provided invaluable insights into the complexities of chess modeling, ultimately guiding the implementation of a robust transformer-based solution capable of simulating realistic gameplay across all skill levels.
+#### Current Progress and Future Goals
+  - Current Achievements:
+    - The V1 transformer model reliably plays at a beginner level (~800 ELO).
+    - The V5/V6 transformer models have achieved intermediate-level play (~1200 ELO).
+  - Next Milestones:
+    - Develop models capable of advanced (~1750 ELO) and master (~2250 ELO) play.
+    - Until these milestones are reached, Stockfish will remain the backend engine for advanced and master-level gameplay.
 
 ## Future Features
 
-Here are some exciting features planned for future development:
+The following enhancements are planned to advance the capabilities of the chess bot and refine its gameplay:
 
-1. **Expanded Training Dataset**: Increase the training size to over 100k games for each fine-tuned model, enabling more human-like gameplay and improved generalization across ELO ranges.
-2. **Reinforcement Learning**: Further refine the master-level bot by incorporating reinforcement learning techniques, enabling it to learn advanced strategies and adapt dynamically to different playstyles.
-3. **Enhanced Chess Move Evaluation**: Integrate a chess evaluator to assess and rate moves in PGN games. Include these evaluations in the transformer tensor to help the model distinguish between good and bad moves, particularly for high-level ELO play.
-4. **Integrated Chess Phases**: Adapt the playstyle to react to the different stages of the game. Evaluate and split PGN games into the three main phases of chess: opening, middlegame, and endgame. Use this data to help the model determine the best strategy for each phase of the game.
+1. Expanded Training Dataset:
+  - Preprocess Stockfish FEN evaluations for all moves across 26,000 grandmaster games.
+  - Evaluate every move and corresponding legal moves at each position to provide richer data for training, enhancing the model’s understanding of advanced strategies.
+2. Lichess Puzzles Integration:
+  - Fine-tune the model using targeted Lichess puzzles to address specific weaknesses, particularly in the mid-to-endgame transition.
+  - Utilize puzzle-based training to improve the model's ability to handle complex positional and tactical scenarios.
+3. Unsupervised Learning:
+  - Extend the transformer model with unsupervised learning techniques to improve decision-making:
+  - Train the model by playing games against itself or Stockfish.
+  - Reward or penalize moves based on their effectiveness, enabling the model to refine its strategies dynamically.
+4. Advanced and Master Level Bots:
+  - Develop and deploy bots capable of playing at advanced (~1750 ELO) and master (~2250 ELO) levels.
+  - Incorporate larger datasets, late-game puzzle strategies, and fine-tuned unsupervised learning to achieve the required performance.
+
+These planned features will pave the way for a more robust and competitive chess bot, capable of catering to a wide range of skill levels.
 
 ## Contributing
 
