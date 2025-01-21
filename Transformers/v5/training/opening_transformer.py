@@ -31,9 +31,8 @@ Usage:
 2. Run the script to preprocess data, train the model, and save results.
 
 Results:
-- #loss: 2.5458 - next_move_output_loss: 1.6852 - outcome_output_loss: 0.8606 - next_move_output_accuracy: 0.4622 - outcome_output_accuracy: 0.5014 - val_loss: 2.5144 - val_next_move_output_loss: 1.6496 - val_outcome_output_loss: 0.8648 - val_next_move_output_accuracy: 0.4698 - val_outcome_output_accuracy: 0.4936
+- loss: 2.5458 - next_move_output_loss: 1.6852 - outcome_output_loss: 0.8606 - next_move_output_accuracy: 0.4622 - outcome_output_accuracy: 0.5014 - val_loss: 2.5144 - val_next_move_output_loss: 1.6496 - val_outcome_output_loss: 0.8648 - val_next_move_output_accuracy: 0.4698 - val_outcome_output_accuracy: 0.4936
 """
-import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
@@ -100,16 +99,15 @@ def preprocess_data(json_path):
             labels.append(game["moves"][i + 1])
             outcomes.append(outcome)
 
-    # Map outcomes to integers
     outcome_map = {-1: 0, 0: 1, 1: 2}
     outcomes = np.array([outcome_map[outcome] for outcome in outcomes]).reshape(-1, 1)
 
-    # Map moves to indices
     unique_moves = sorted(set(labels))
     move_to_idx = {move: idx for idx, move in enumerate(unique_moves)}
+    print(f"Min index: {min(move_to_idx.values())}, Max index: {max(move_to_idx.values())}")
+    print(f"Expected input_dim (total unique moves): {len(move_to_idx)}")
     labels = np.array([move_to_idx[label] for label in labels])
     
-    # Encode and pad move sequences
     moves_encoded = [uci_to_tensor(seq, move_to_idx) for seq in moves]
     moves_padded = pad_sequences(moves_encoded, padding="post")
 
@@ -176,21 +174,15 @@ def create_transformer_model(input_fen_shape, input_move_shape, num_moves):
     fen_input = Input(shape=input_fen_shape, name="fen_input")
     move_input = Input(shape=input_move_shape, name="move_input")
 
-    # Embedding for FEN
     fen_emb = Embedding(input_dim=12 * 8 + 2, output_dim=64)(fen_input)
     fen_emb = GlobalAveragePooling1D()(fen_emb)
 
-    # Embedding for move sequences
     move_emb = Embedding(input_dim=num_moves, output_dim=64)(move_input)
     move_emb = GlobalAveragePooling1D()(move_emb)
 
-    # Combine embeddings
     combined = Concatenate()([fen_emb, move_emb])
-
-    # Project to a uniform size before adding residuals
     x = Dense(128, activation="relu")(combined)
 
-    # Transformer block
     attn_output = MultiHeadAttention(num_heads=4, key_dim=64)(tf.expand_dims(x, axis=1), tf.expand_dims(x, axis=1))
     attn_output = Dropout(0.1)(attn_output)
     out1 = LayerNormalization(epsilon=1e-6)(x + tf.squeeze(attn_output, axis=1))
@@ -200,12 +192,10 @@ def create_transformer_model(input_fen_shape, input_move_shape, num_moves):
     ffn_output = Dense(128)(ffn)
     out2 = LayerNormalization(epsilon=1e-6)(out1 + ffn_output)
 
-    # Final output for next move prediction
     move_pred = Dense(64, activation="relu")(out2)
     move_pred = Dropout(0.3)(move_pred)
     next_move_output = Dense(num_moves, activation="softmax", name="next_move_output")(move_pred)
 
-    # Final output for game outcome prediction
     outcome_pred = Dense(32, activation="relu")(out2)
     outcome_pred = Dense(3, activation="softmax", name="outcome_output")(outcome_pred)
 
@@ -232,8 +222,8 @@ def lr_scheduler(epoch, lr):
     - `alpha`: The final learning rate as a fraction of the initial learning rate (default is 0.1).
     """
     initial_lr = 1e-4
-    decay_epochs = 10  # Total number of epochs
-    alpha = 0.1  # Final learning rate as a fraction of the initial learning rate
+    decay_epochs = 10
+    alpha = 0.1
     return initial_lr * (alpha + (1 - alpha) * 0.5 * (1 + np.cos(np.pi * epoch / decay_epochs)))
 
 def train_model(PROCESSED_JSON_PATH, CHECKPOINT_DIR, FENS_FILE, MOVES_FILE, LABELS_FILE, GAME_OUTCOMES_FILE, MOVE_TO_IDX_FILE):
@@ -270,7 +260,6 @@ def train_model(PROCESSED_JSON_PATH, CHECKPOINT_DIR, FENS_FILE, MOVES_FILE, LABE
         fens, moves, labels, outcomes, move_to_idx = preprocess_data(PROCESSED_JSON_PATH)
         save_preprocessed_data(fens, moves, labels, outcomes, move_to_idx, CHECKPOINT_DIR)
 
-    # Split data
     X_fens_train, X_fens_test, X_moves_train, X_moves_test, X_outcomes_train, X_outcomes_test, y_train, y_test = train_test_split(
         fens, moves, outcomes, labels, test_size=0.2, random_state=42
     )
@@ -287,7 +276,6 @@ def train_model(PROCESSED_JSON_PATH, CHECKPOINT_DIR, FENS_FILE, MOVES_FILE, LABE
         metrics={"next_move_output": "accuracy", "outcome_output": "accuracy"}
     )
 
-    # Callbacks
     checkpoint = ModelCheckpoint(
         os.path.join(CHECKPOINT_DIR, "model_checkpoint.h5"),
         save_best_only=True,
@@ -297,7 +285,6 @@ def train_model(PROCESSED_JSON_PATH, CHECKPOINT_DIR, FENS_FILE, MOVES_FILE, LABE
     early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min")
     lr_schedule = LearningRateScheduler(lr_scheduler)
 
-    # Train the model
     print("Training model...")
     history = model.fit(
         [X_fens_train, X_moves_train],
@@ -308,13 +295,12 @@ def train_model(PROCESSED_JSON_PATH, CHECKPOINT_DIR, FENS_FILE, MOVES_FILE, LABE
         callbacks=[checkpoint, early_stopping, lr_schedule]
     )
 
-    # Save the final model
     model.save(os.path.join(CHECKPOINT_DIR, "model_final_with_outcome.h5"))
     print("Model training complete and saved.")
 
 if __name__ == "__main__":
     PROCESSED_JSON_PATH = r"D:\checkmate_ai\game_phases\open_data.json"
-    CHECKPOINT_DIR = "models/checkpoints"
+    CHECKPOINT_DIR = "../models/checkpoints"
     FENS_FILE = os.path.join(CHECKPOINT_DIR, "fens.npy")
     MOVES_FILE = os.path.join(CHECKPOINT_DIR, "moves.npy")
     LABELS_FILE = os.path.join(CHECKPOINT_DIR, "labels.npy")

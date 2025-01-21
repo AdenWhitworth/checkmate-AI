@@ -41,7 +41,7 @@ def load_model(model_path: str, custom_objects=None) -> tf.keras.Model:
         raise FileNotFoundError(f"Failed to load model from {model_path}. Ensure the path is correct.\nError: {e}")
 
 
-def convert_to_onnx(model: tf.keras.Model, opset_version: int = 13) -> bytes:
+def convert_to_onnx(model: tf.keras.Model, opset_version: int = 15) -> bytes:
     """
     Convert a TensorFlow Keras model to ONNX format.
 
@@ -53,10 +53,16 @@ def convert_to_onnx(model: tf.keras.Model, opset_version: int = 13) -> bytes:
         bytes: The serialized ONNX model as a byte string.
     """
     try:
-        # Define input signature
         input_signature = [tf.TensorSpec(shape=input_tensor.shape, dtype=input_tensor.dtype) for input_tensor in model.inputs]
 
-        # Convert to ONNX
+        print("Input Signature:")
+        for input_tensor in model.inputs:
+            print(f"Shape: {input_tensor.shape}, Dtype: {input_tensor.dtype}")
+
+        for layer in model.layers:
+            if isinstance(layer, tf.keras.layers.Embedding):
+                print(f"Layer: {layer.name}, Input Dim: {layer.input_dim}, Output Dim: {layer.output_dim}")
+
         model_proto, _ = tf2onnx.convert.from_keras(
             model,
             opset=opset_version,
@@ -105,8 +111,8 @@ def convert_and_save_model(model_path: str, output_path: str, custom_objects=Non
 
 
 if __name__ == "__main__":
-    model_path = "../Transformers/v6/models/checkpoints3/model_midgame_final.h5"
-    output_path = "../Transformers/v6/models/checkpoints3/onnx_model/model_midgame_final.onnx"
+    model_path = "../Transformers/v5/models/checkpoints/model_final_with_outcome.h5"
+    output_path = "../Transformers/v5/models/checkpoints/onnx_model/model_final_with_outcome.onnx"
 
     def top_k_accuracy(y_true, y_pred, k=5):
         """
@@ -122,4 +128,7 @@ if __name__ == "__main__":
         """
         return tf.keras.metrics.sparse_top_k_categorical_accuracy(y_true, y_pred, k=k)
 
-    convert_and_save_model(model_path, output_path, {"top_k_accuracy": top_k_accuracy})
+    #Example for with custom objects
+    #convert_and_save_model(model_path, output_path, {"top_k_accuracy": top_k_accuracy})
+
+    convert_and_save_model(model_path, output_path)
