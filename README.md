@@ -219,15 +219,114 @@ The current implementation consists of two specialized transformer models: the O
 
 ##### **Steps to Reproduce**:
 
-To replicate the training and evaluation of the current models, follow these steps:
+Follow these steps to replicate the training, evaluation, and testing of the current models.
 
-1. Setup Environment:
-  - Ensure all prerequresits and downloads from the getting started section are available and working. 
-2. Preprocess Data:
-  - Convert the zst PGN games to PGN file
+1. **Setup Environment**
+Ensure the following prerequisites are available and configured:
+  - Install all dependencies listed in the Getting Started section.
+  - Download and configure required datasets (e.g., PGN games, stockfish binary, opening book).
+  - Verify the environment is functioning correctly.
 
+2. **Preprocess Data**
+  a.  Convert the `.zst` games files into a `.pgn` file
+  This step decompresses raw `.zst` game files into a `.pgn` format.
+  ```bash
+  cd "checkmate-AI/PGN Games/utility"
+  # Update the target_game_count and skip_game_count as desired.
+  # Example: target_game_count = 150,000 and skip_game_count = 0
+  python partial_decompress_zst_to_pgn.py
+  ```
+  b. Filter PGN games by ELO and Termination
+  Filter games based on player ratings (ELO) and termination conditions.
+  ```bash
+  cd "checkmate-AI/PGN Games/utility"
+  # Specify the path to the `.pgn` file created in Step 2a.
+  python filter_pgn_by_elo_game_termination.py
+  ```
+  c. Annotate Games with an Openings Book
+  Enrich games with data from a chess opening book to focus on the opening phase.
+  ```bash
+  cd "checkmate-AI/Transformers/v5/processing"
+  # Provide paths to the filtered `.pgn` file from Step 2b and the downloaded opening book.
+  python opening_processing.py
+  ```
+  d. Create an SQLite Database for Stockfish Caching
+  Set up a database to cache Stockfish evaluations and reduce redundant calculations.
+  ```bash
+  cd "checkmate-AI/Transformers/processing"
+  # Note: Keep track of the output path for use in the next step.
+  python setup_sqlite.py
+  ```
+  e. Annotate Game FENs with Stockfish Evaluations
+  Use Stockfish to annotate FEN positions with evaluation scores.
+  ```bash
+  cd "checkmate-AI/Transformers/processing"
+  # Provide paths to the filtered `.pgn` file from Step 2b and the SQLite database from Step 2d.
+  # Note: This script is resource-intensive. Annotating 3,200 games can take ~48 hours.
+  python annotate_pgn_evals.py
+  ```
+3.  **Train the Models**
+   a. Train the Opening Phase Transformer
+  Train the model specifically for the opening phase using annotated data.
+   ```bash
+  cd "checkmate-AI/Transformers/v5/training"
+  # Provide the path to the annotated opening data from Step 2c.
+  python opening_transformer.py
+  ```
+   b. Train the Midgame Phase Transformer
+   Train the model for midgame strategies using Stockfish-annotated data.
+   ```bash
+  cd "checkmate-AI/Transformers/v6/training"
+  # Provide the path to the annotated middle game data from Step 2e.
+  python middle_transformer.py
+  ```
+4. **Evaluate and Test the Models**
+  a. Predict the Next Best Opening Move
+  Evaluate the opening model on a specific position.
+  ```bash
+  cd "checkmate-AI/Transformers/v5/testing"
+  # Specify the path to the trained opening model from Step 3a.
+  python predict_next_move.py
+  ```
+  b. Predict the Next Best Midgame Move
+  Evaluate the midgame model on a specific position.
+  ```bash
+  cd "checkmate-AI/Transformers/v6/testing"
+  # Specify the path to the trained midgame model from Step 3b.
+  python predict_next_move.py
+  ```
+  c. Predict the Next Best Full Game Move
+  Combine the opening and midgame models with the 7-piece endgame tablebase for full-game inference.
+  ```bash
+  cd "checkmate-AI/Transformers/v6/testing"
+  # Provide paths to the trained opening model (Step 3a) and midgame model (Step 3b).
+  python predict_next_move_full_game.py
+  ```
+  d. Play Against the Full Game Model in Terminal
+  Engage in a terminal-based chess game against the full-game model.
+  ```bash
+  cd "checkmate-AI/Transformers/v6/testing"
+  # Specify paths to the opening model (Step 3a) and midgame model (Step 3b).
+  python terminal_vs_transformer.py
+  ```
+  e. Simulate Stockfish vs. Full Game Model
+  Pit Stockfish against the full-game model for benchmarking.
+  ```bash
+  cd "checkmate-AI/Transformers/v6/testing"
+  # Provide paths to the opening model (Step 3a), midgame model (Step 3b), and Stockfish binary.
+  python stockfish_vs_transformer_v5_v6.py
+  ```
+  f. Simulate V1 vs. V5/V6 Transformer Models
+  Test the progression of model versions by simulating a game between the V1 and V5/V6 models.
+  ```bash
+  cd "checkmate-AI/Transformers/v6/testing"
+  # Provide paths to the opening model (Step 3a) and midgame model (Step 3b).
+  python transformer_v1_vs_transformer_v6.py
+  ```
 
-##### **Opening Phase Transformer**:
+##### **Individual Model Creation**
+
+###### **Opening Phase Transformer**:
 
 The Opening Phase Transformer focused on the initial stage of chess games, leveraging annotated opening book data and game outcomes to specialize in early-game strategies. This phase-specific model trained on openings provided a clearer focus on common patterns in chess openings.
 
@@ -295,7 +394,7 @@ The Opening Phase Transformer focused on the initial stage of chess games, lever
       - Future work could extend the approach to middle and endgame phases, ensuring each phase benefits from tailored training data and objectives.
       - Incorporating legal move evaluations and Stockfish analysis could further refine predictions and improve model performance in real-game scenarios.
 
-##### **Midgame Phase Transformer**:
+###### **Midgame Phase Transformer**:
 
 The Midgame Phase Transformer specialized in predicting moves and evaluations during the midgame, where strategic complexity increases. By incorporating legal moves and evaluations for every board state, this model emphasized contextual understanding of the game.
 
@@ -360,10 +459,31 @@ The Midgame Phase Transformer specialized in predicting moves and evaluations du
     - **Multi-Task Learning Potential**: The midgame model highlights the effectiveness of multi-task learning for chess prediction tasks. By incorporating legal moves and evaluations, the model improves contextual understanding, making it better suited for complex midgame scenarios.
     - **Dataset Size Impact**: The accuracy and top-k performance of the model improved significantly as the number of preprocessed games increased. However, only 3,200 games were used due to the high preprocessing overhead (~10 hours per 1,000 games). Future work could explore processing larger datasets (e.g., 10,000 games) to evaluate the impact of dataset size on accuracy and convergence.
 
+##### **Inference Process**:
 
+The current model takes a very different approach than all the previos that I have trained in order to predict the next best move. Previous models were trained off a whole game and expected to produce the next best move at any point in the game. As discussed in the previous models section, this had some draw backs and is why the current model is actually two models and a table base. Specifically, an individual model trained on opening moves of grand masters and annotated with an opening book, an individual model trained on middle game moves of grand masters and annotated legal moves with stockfish evaluations, and access to the Lichess 7 piece table base for endgame play. 
 
+It was determined that the best phase split for training the models and using the table base was the following: first 10 moves in the game are the opening, seven pieces left on the board indicates end game, and everything else is considered middle game. Splitting it this was resulted in different inferance considerations for each of the phases.
 
+1. Opening Inferance:
 
+The opening model is pretty stripped down, so the inferance process does not require to many steps. Using the vocabulary model mapings saved during training allows for inputs to be converted to tensors, and the outputs to be converted back to a uci chess move. The imputs are just the current fen and an array of ten or less uci moves. The output is an array of move probabilities and the predicted outcome of the game based on the highest probable move.
+
+2. Middle Game Inferance:
+
+Stragetically, the middle game is much more complex than the opening which typically follow similar patterns. This is reflected by a more complex inferance process for the middle game. The process of using the vocabulary for the model mappings for converting both the inputs and outputs is still the same as the opening inference. The input is also the same, the fen of the current position and all the uci moves leading up to this position in an array. Because the middle model is both a policy and value output, there are a few different strategies to producing the best move. The first strategy is to only consider the policy output probabilies and return the best move purely based on this. With ingame testing, it was observed that this approach caused unnessecary blunders. Because of the model accuracy during training, the policy output was not confident in the best move and typically produced a few moves of similar probability. 
+
+This takes us to the next strategy, where we consider the cp and mate evals determined by the value output along side the move probabilites in the policy output. To create equal terms in the weight calculation, the CP evals previously as [-500, 500] are normalized to [-1, 1]. Mate evals are not always present as they are only shown if a mate is within 3 or less moves. A mate eval of zero indicates that there is none. A negatige mate eval is really bad and is penalized in the weight calculation as this means you are in jepardy of mate. A lower positive mate eval closer to 0 but not 0 is weighted better. Due to the model variability anything within +/- 0.01 is considered 0. 
+
+The first weighted evaluation dynamically deteermines the best move. Strong positions indicated by a high CP eval are given more priority. Mate evals of 0 give full priority to the CP eval. The model tended to play timedly with just this weight alone, so a penalty was added for repeated moves and for cycling between positions to promote exploring other moves which are viable based on the weighted score. 
+
+Some train and error resulted in a second weighted evaluation called weighted priority, which is the main way I infer moves for the middle model. It does the same CP and mate evaluation normalization, but it cares more about king safety in the later middle game. The moddle plays more aggressive at the beginning of the middle game phase by just prioritizing high cp eval moves and dynamically balancing the mate and CP weights. The later middle game phase indicated when less than 14 pieces are left on the board premotes moves which either cause a check of the opponent or protect your king from check. 
+
+The last approach is to use an alpha beta prune at each half turn depth to determine the best move. This process uses the the same weighted scoring as before to assess the best move at each depth. This is then pruned at the desired input depth to find the best move. This approach would be the best if the model was more accurate. Because the current model does not play the best move, then it is hard to rely on sub optimal moves at larger depths. Additionally, the depth search algorithm even with a caching system of a transposition table still was extremely computationaly expensive with only depthss of 3 or 4. Long term as the model improves, this method of inferance will become the best option but for now the weighted priority stragegy plays the best chess by targeting the models weakkpoint of late middle game stragety. The middle model was much better at determining the value output of the CP and mate because there are statistically less options. This is why the weighted priority plays much better is because the models move probabilites become worse as the games progress do to insufficient training but the model is still accurate at current position evaluation so it is able to play a good move based on this. 
+
+3. End Game Inferance:
+
+An end game table base promotes perfect endgame play. It is well known that we are able to calculate all the possible moves and outcomes for every chess position when there are 7 or less pieces on the board. Instead of training a specific model, it is better to use the readily available tablebase by Lichess to predict the next best endgame move. The tablebase can be stored locally, but due to storage concerns as the table base is 17TB for 7 piece table base and 160GB for 6 piece table base it was deemed more efficient to use the Lichess API. Sending the current endgame fen will return a list of moves with win-draw-loss value for each. Maximising this value will return the best endgame move. 
 
 #### Previous Models
 
