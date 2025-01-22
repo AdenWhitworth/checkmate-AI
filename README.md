@@ -1138,7 +1138,7 @@ The multi-phase transformer model has undergone significant development, reveali
 
 1. ELO Performance Evaluation
   - V1 Model:
-    - When tested against Stockfish's lowest level (1350 ELO), the V1 model demonstrated beginner-level play (~800 ELO) as per post-game Stockfish analysis.
+    - When tested against Stockfish's lowest level (1350 ELO), the V1 model demonstrated beginner-level play (~700 ELO) as per post-game Stockfish analysis.
   - V5/V6 Model:
     - Games against Stockfish's lowest level were far more competitive, showcasing intermediate-level play (~1200 ELO).
   - Direct Comparison:
